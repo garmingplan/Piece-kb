@@ -1,7 +1,7 @@
 <h1 align="center">Piece</h1>
 
 <p align="center">
-  <img src="doc/icon.ico" alt="Piece Icon" width="128" height="128">
+  <img src="assets/icon.ico" alt="Piece Icon" width="128" height="128">
 </p>
 
 <p align="center">

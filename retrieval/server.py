@@ -28,7 +28,7 @@ async def resolve_keywords_tool(
     query: Annotated[str, Field(description="Query text to search for relevant documents")],
     max_results: Annotated[int, Field(description="Maximum number of keywords to return (default: 20, range: 1-50)")] = 20
 ) -> dict:
-    await ctx.info(f"[工具1] 开始解析查询: {query}, max_results: {max_results}")
+    await ctx.info(f"[Tool 1] Resolving query: {query}, max_results: {max_results}")
 
     try:
         # 调用核心工作流
@@ -39,23 +39,23 @@ async def resolve_keywords_tool(
         if max_results and max_results < len(keywords):
             keywords = keywords[:max_results]
             result["keywords"] = keywords
-            await ctx.info(f"[工具1] 已根据max_results={max_results}截断结果")
+            await ctx.info(f"[Tool 1] Truncated to max_results={max_results}")
 
-        await ctx.info(f"[工具1] 解析完成，返回 {len(keywords)} 个关键词")
+        await ctx.info(f"[Tool 1] Resolved {len(keywords)} keywords")
 
         # 输出关键统计信息
         stats = result.get("stats", {})
         await ctx.info(
-            f"[工具1] 检索统计 - BM25召回: {stats.get('bm25_recall_count', 0)}, "
-            f"向量召回: {stats.get('vector_recall_count', 0)}, "
-            f"融合后: {stats.get('total_fused_results', 0)}"
+            f"[Tool 1] Stats - BM25: {stats.get('bm25_recall_count', 0)}, "
+            f"Vector: {stats.get('vector_recall_count', 0)}, "
+            f"Fused: {stats.get('total_fused_results', 0)}"
         )
 
         # 直接返回纯数据，让FastMCP自动序列化为结构化JSON
         return result
 
     except Exception as e:
-        await ctx.error(f"[工具1] 解析失败: {str(e)}")
+        await ctx.error(f"[Tool 1] Failed: {str(e)}")
         raise
 
 
@@ -73,10 +73,10 @@ async def get_docs_tool(
     # 限制最多3个doc_title
     limit = min(max_docs, 3) if max_docs else 3
     if len(doc_titles) > limit:
-        await ctx.warning(f"[工具2] 传入了 {len(doc_titles)} 个doc_title，已自动截断为前{limit}个")
+        await ctx.warning(f"[Tool 2] Truncated {len(doc_titles)} doc_titles to top {limit}")
         doc_titles = doc_titles[:limit]
 
-    await ctx.info(f"[工具2] 开始获取 {len(doc_titles)} 个文档, include_metadata: {include_metadata}")
+    await ctx.info(f"[Tool 2] Retrieving {len(doc_titles)} documents, include_metadata: {include_metadata}")
 
     try:
         # 调用文档获取函数（同步函数）
@@ -94,11 +94,11 @@ async def get_docs_tool(
                 not_found.append(title)
 
         await ctx.info(
-            f"[工具2] 获取完成 - 成功: {len(documents)}, 未找到: {len(not_found)}"
+            f"[Tool 2] Completed - Found: {len(documents)}, Not found: {len(not_found)}"
         )
 
         if not_found:
-            await ctx.warning(f"[工具2] 以下doc_title未找到文档: {', '.join(not_found)}")
+            await ctx.warning(f"[Tool 2] Doc titles not found: {', '.join(not_found)}")
 
         result = {"documents": documents, "not_found": not_found}
 
@@ -109,13 +109,13 @@ async def get_docs_tool(
                 "total_found": len(documents),
                 "total_not_found": len(not_found)
             }
-            await ctx.info(f"[工具2] 已添加元数据信息")
+            await ctx.info(f"[Tool 2] Metadata included")
 
         # 直接返回纯数据，让FastMCP自动序列化为结构化JSON
         return result
 
     except Exception as e:
-        await ctx.error(f"[工具2] 获取文档失败: {str(e)}")
+        await ctx.error(f"[Tool 2] Failed: {str(e)}")
         raise
 
 

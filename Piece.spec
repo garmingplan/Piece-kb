@@ -43,7 +43,7 @@ if sqlite_vec_dll:
 # 收集数据文件
 datas = [
     # 图标
-    (str(PROJECT_ROOT / 'doc' / 'icon.ico'), 'doc'),
+    (str(PROJECT_ROOT / 'assets' / 'icon.ico'), 'assets'),
     # 国际化文件
     (str(PROJECT_ROOT / 'app' / 'i18n' / 'locales'), 'app/i18n/locales'),
 ]
@@ -154,7 +154,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(PROJECT_ROOT / 'doc' / 'icon.ico'),
+    icon=str(PROJECT_ROOT / 'assets' / 'icon.ico'),
 )
 
 coll = COLLECT(

@@ -62,12 +62,21 @@ logger = logging.getLogger(__name__)
 def start_mcp_server():
     """在后台线程中启动 MCP 服务"""
     try:
+        # 设置环境变量，确保控制台输出支持 UTF-8
+        os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+
+        # Windows 平台强制设置 stdout/stderr 编码为 UTF-8
+        if sys.platform == 'win32':
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
         from retrieval.server import mcp
 
         settings = get_settings()
         mcp_port = settings.mcp.port
 
-        logger.info(f"[MCP] 启动 Piece MCP 服务 - http://{MCP_HOST}:{mcp_port}/mcp")
+        logger.info(f"[MCP] Starting Piece MCP service - http://{MCP_HOST}:{mcp_port}/mcp")
         mcp.run(
             transport="streamable-http",
             host=MCP_HOST,
@@ -75,7 +84,7 @@ def start_mcp_server():
             path="/mcp",
         )
     except Exception as e:
-        logger.error(f"[MCP] 启动失败: {e}", exc_info=True)
+        logger.error(f"[MCP] Failed to start: {e}", exc_info=True)
 
 
 def _show_window():
@@ -187,6 +196,14 @@ def main():
     # 初始化服务（主进程和子进程都需要）
     setup()
 
+    # 获取图标路径（支持打包环境）
+    if getattr(sys, 'frozen', False):
+        # 打包环境：使用 _MEIPASS
+        icon_path = Path(sys._MEIPASS) / "assets" / "icon.ico"
+    else:
+        # 开发环境
+        icon_path = PROJECT_ROOT / "assets" / "icon.ico"
+
     # 启动 NiceGUI（native 模式，独立桌面窗口）
     ui.run(
         title="Piece - 个人知识库",
@@ -197,6 +214,7 @@ def main():
         native=True,  # 启用原生窗口模式
         window_size=(1100, 700),  # 窗口大小
         fullscreen=False,
+        favicon=str(icon_path) if icon_path.exists() else None,  # 设置图标（文件存在时）
     )
 
 

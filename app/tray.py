@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # 图标路径
-ICON_PATH = PROJECT_ROOT / "doc" / "icon.ico"
+ICON_PATH = PROJECT_ROOT / "assets" / "icon.ico"
 
 
 class TrayManager:
