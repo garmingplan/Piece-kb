@@ -165,23 +165,6 @@ def _render_appearance_settings(settings_form: dict, settings_handlers, apply_th
 
             ui.separator()
 
-            # 启动时最小化设置
-            ui.label(t("settings_appearance.start_minimized")).classes("text-sm font-medium theme-text")
-
-            current_start_minimized = settings_form.get("start_minimized", False)
-
-            def on_start_minimized_change(e):
-                settings_form["start_minimized"] = e.value
-
-            ui.switch(
-                value=current_start_minimized,
-                on_change=on_start_minimized_change,
-            ).classes("theme-text")
-
-            ui.label(t("settings_appearance.start_minimized_hint")).classes("text-xs theme-text-muted")
-
-            ui.separator()
-
             with ui.row().classes("w-full justify-end"):
                 ui.button(t("settings.btn_save"), on_click=settings_handlers.save_settings_form).props("color=primary")
 

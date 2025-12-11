@@ -125,9 +125,7 @@
     "theme_dark": "深色",
     "theme_pink": "少女粉",
     "language": "应用语言",
-    "language_hint": "切换语言后，部分界面文字需刷新页面才能更新",
-    "start_minimized": "启动时最小化",
-    "start_minimized_hint": "启动时直接最小化到系统托盘（需要重启生效）"
+    "language_hint": "切换语言后,部分界面文字需刷新页面才能更新"
   },
   "settings_embedding": {
     "title": "嵌入模型设置",

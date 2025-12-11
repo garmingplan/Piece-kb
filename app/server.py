@@ -6,7 +6,6 @@ Piece 应用主入口
 - 注册 API 路由和 UI 页面
 - 启动后台任务处理器
 - 启动 MCP 检索服务（后台线程）
-- 启动系统托盘（支持最小化到托盘）
 - 启动 NiceGUI 桌面应用（native mode）
 
 启动方式:
@@ -40,17 +39,10 @@ from indexing.settings import get_settings
 from app.api import register_routes, register_chunk_routes, register_export_routes
 from app.api.log_routes import register_log_routes
 from app.ui import register_pages
-from app.tray import TrayManager
 
 
 # MCP 服务配置
 MCP_HOST = os.getenv("MCP_HOST", "127.0.0.1")
-
-# 全局托盘管理器
-_tray_manager: TrayManager = None
-
-# 全局窗口引用（用于显示/隐藏）
-_webview_window = None
 
 # 标记是否是主进程（用于避免子进程重复初始化）
 _is_main_process = multiprocessing.current_process().name == "MainProcess"
@@ -87,40 +79,6 @@ def start_mcp_server():
         logger.error(f"[MCP] Failed to start: {e}", exc_info=True)
 
 
-def _show_window():
-    """显示主窗口"""
-    global _webview_window
-    if _webview_window is not None:
-        try:
-            _webview_window.show()
-            _webview_window.restore()  # 从最小化恢复
-        except Exception as e:
-            logger.error(f"[Tray] 显示窗口失败: {e}", exc_info=True)
-
-
-def _quit_app():
-    """退出应用"""
-    logger.info("[App] 正在退出...")
-    # 停止 NiceGUI
-    app.shutdown()
-
-
-def _on_window_close():
-    """
-    窗口关闭事件处理
-
-    返回 False 阻止窗口关闭,改为隐藏到托盘
-    """
-    global _webview_window
-    if _webview_window is not None:
-        try:
-            _webview_window.hide()
-            logger.info("[Tray] 窗口已最小化到托盘")
-        except Exception as e:
-            logger.error(f"[Tray] 隐藏窗口失败: {e}", exc_info=True)
-    return False  # 阻止窗口关闭
-
-
 def setup():
     """初始化服务（注册路由、页面、生命周期钩子）"""
     # 生命周期钩子
@@ -139,59 +97,14 @@ def setup():
 
 def main():
     """启动应用"""
-    global _tray_manager, _webview_window
-
-    # 只在主进程中初始化数据库、MCP服务和托盘
+    # 只在主进程中初始化数据库、MCP服务
     if _is_main_process:
         # 初始化数据库
         init_database()
 
-        # 获取设置
-        settings = get_settings()
-        start_minimized = settings.appearance.start_minimized
-
         # 在后台线程启动 MCP 服务
         mcp_thread = threading.Thread(target=start_mcp_server, daemon=True)
         mcp_thread.start()
-
-        # 创建托盘管理器
-        _tray_manager = TrayManager(
-            on_show_window=_show_window,
-            on_quit=_quit_app,
-        )
-        _tray_manager.start()
-
-        # 配置 pywebview 窗口事件
-        def on_webview_ready():
-            """pywebview 窗口就绪后的回调"""
-            global _webview_window
-            import webview
-
-            # 获取窗口引用
-            windows = webview.windows
-            if windows:
-                _webview_window = windows[0]
-
-                # 设置关闭事件处理器（最小化到托盘）
-                _webview_window.events.closing += _on_window_close
-
-                # 如果配置了启动时最小化，则隐藏窗口
-                if start_minimized:
-                    # 延迟隐藏，确保窗口已完全显示
-                    import time
-                    time.sleep(0.5)
-                    _webview_window.hide()
-                    logger.info("[App] 启动时最小化到托盘")
-
-        # 在新线程中等待 webview 就绪
-        def wait_for_webview():
-            import time
-            # 等待 webview 初始化
-            time.sleep(1)
-            on_webview_ready()
-
-        webview_thread = threading.Thread(target=wait_for_webview, daemon=True)
-        webview_thread.start()
 
     # 初始化服务（主进程和子进程都需要）
     setup()

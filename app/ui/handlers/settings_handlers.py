@@ -40,7 +40,6 @@ class SettingsHandlers:
             "data_path": settings.data_path,
             "theme": settings.appearance.theme,
             "language": settings.appearance.language,
-            "start_minimized": settings.appearance.start_minimized,
             # WebDAV 配置
             "webdav_enabled": settings.webdav.enabled,
             "webdav_hostname": settings.webdav.hostname,
@@ -63,7 +62,6 @@ class SettingsHandlers:
                 appearance=AppearanceSettings(
                     theme=self.settings_form["theme"],
                     language=self.settings_form["language"],
-                    start_minimized=self.settings_form.get("start_minimized", False),
                 ),
                 webdav=WebDAVSettings(
                     enabled=self.settings_form.get("webdav_enabled", False),
@@ -83,9 +81,6 @@ class SettingsHandlers:
 
                 if old_settings.data_path != new_settings.data_path:
                     needs_restart.append("数据路径")
-
-                if old_settings.appearance.start_minimized != new_settings.appearance.start_minimized:
-                    needs_restart.append("启动最小化")
 
                 # 切换语言（立即生效）
                 if old_settings.appearance.language != new_settings.appearance.language:

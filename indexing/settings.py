@@ -59,7 +59,6 @@ class AppearanceSettings(BaseModel):
     """外观设置"""
     theme: str = "light"  # "dark" | "light" | "pink"
     language: str = "zh"  # "zh" | "en"
-    start_minimized: bool = False  # 启动时最小化到托盘
 
 
 class WebDAVSettings(BaseModel):

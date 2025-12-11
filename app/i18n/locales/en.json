@@ -125,9 +125,7 @@
     "theme_dark": "Dark",
     "theme_pink": "Pink",
     "language": "Language",
-    "language_hint": "Some UI text requires page refresh after language change",
-    "start_minimized": "Start Minimized",
-    "start_minimized_hint": "Start minimized to system tray (requires restart)"
+    "language_hint": "Some UI text requires page refresh after language change"
   },
   "settings_embedding": {
     "title": "Embedding Model Settings",
