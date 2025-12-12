@@ -53,12 +53,13 @@ jobs:
           echo "Found: $ZIP_FILE"
 
       - name: 创建 Release
-        uses: softprops/action-gh-release@v1
+        uses: ncipollo/release-action@v1
         with:
-          files: ${{ steps.find_zip.outputs.zip_file }}
+          allowUpdates: true
           draft: false
-          prerelease: false
-          generate_release_notes: true
+          makeLatest: true
+          tag: ${{ github.ref_name }}
+          artifacts: "${{ steps.find_zip.outputs.zip_file }}"
           body: |
             ## Piece v${{ steps.get_version.outputs.version }}
 
@@ -73,8 +74,7 @@ jobs:
 
             ### 更新内容
             详见下方自动生成的 Release Notes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
