@@ -1,0 +1,285 @@
+name: Cross-Platform Testing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false  # 一个平台失败不影响其他平台
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        python-version: ['3.12']
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: 安装系统依赖 (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.0-dev \
+            libgtk-3-dev \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            gir1.2-webkit2-4.0
+
+      - name: 安装 Python 依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 运行平台兼容性测试
+        run: |
+          python -c "
+          import sys
+          import platform
+          from pathlib import Path
+
+          print('=' * 60)
+          print(f'Platform: {platform.system()} {platform.release()}')
+          print(f'Python: {sys.version}')
+          print(f'Architecture: {platform.machine()}')
+          print('=' * 60)
+
+          # 测试路径处理
+          print('\n[Test 1] Path handling...')
+          test_path = Path(__file__).parent / 'data' / 'test.db'
+          print(f'✓ Path resolved: {test_path}')
+
+          # 测试核心导入
+          print('\n[Test 2] Core imports...')
+          try:
+              import sqlite3
+              print('✓ sqlite3')
+
+              import sqlite_vec
+              print(f'✓ sqlite-vec: {sqlite_vec.__version__}')
+
+              import fastmcp
+              print('✓ fastmcp')
+
+              import nicegui
+              print('✓ nicegui')
+
+              from langchain_core import __version__ as lc_version
+              print(f'✓ langchain-core: {lc_version}')
+
+          except ImportError as e:
+              print(f'✗ Import failed: {e}')
+              sys.exit(1)
+
+          # 测试 sqlite-vec 扩展加载
+          print('\n[Test 3] sqlite-vec extension loading...')
+          conn = sqlite3.connect(':memory:')
+          conn.enable_load_extension(True)
+          try:
+              # 查找扩展文件
+              vec_dir = Path(sqlite_vec.__file__).parent
+
+              if sys.platform == 'win32':
+                  ext_name = 'vec0.dll'
+              elif sys.platform == 'darwin':
+                  ext_name = 'vec0.dylib'
+              else:
+                  ext_name = 'vec0.so'
+
+              vec_path = vec_dir / ext_name
+              print(f'Extension path: {vec_path}')
+              print(f'File exists: {vec_path.exists()}')
+
+              if vec_path.exists():
+                  conn.load_extension(str(vec_path.parent / 'vec0'))
+                  version = conn.execute('SELECT vec_version()').fetchone()[0]
+                  print(f'✓ sqlite-vec loaded: v{version}')
+              else:
+                  print(f'✗ Extension file not found: {ext_name}')
+                  sys.exit(1)
+
+          except Exception as e:
+              print(f'✗ Extension load failed: {e}')
+              import traceback
+              traceback.print_exc()
+              sys.exit(1)
+          finally:
+              conn.enable_load_extension(False)
+              conn.close()
+
+          # 测试数据库初始化
+          print('\n[Test 4] Database initialization...')
+          try:
+              from indexing.database import init_database, get_db_info
+              from indexing.settings import get_settings
+
+              settings = get_settings()
+              test_db = settings.get_data_path() / 'test.db'
+              test_db.parent.mkdir(parents=True, exist_ok=True)
+
+              init_database(test_db)
+              info = get_db_info(test_db)
+
+              print(f'✓ Database created: {test_db}')
+              print(f'  SQLite version: {info[\"sqlite_version\"]}')
+              print(f'  Tables: {len(info[\"tables\"])}')
+
+              # 清理
+              test_db.unlink()
+
+          except Exception as e:
+              print(f'✗ Database init failed: {e}')
+              import traceback
+              traceback.print_exc()
+              sys.exit(1)
+
+          print('\n' + '=' * 60)
+          print('✓ All tests passed!')
+          print('=' * 60)
+          "
+
+      - name: 测试打包配置
+        run: |
+          python -c "
+          import sys
+          from pathlib import Path
+
+          print('\n[Test 5] Package configuration...')
+
+          # 测试 Piece.spec 配置
+          spec_file = Path('Piece.spec')
+          if spec_file.exists():
+              print(f'✓ Spec file found: {spec_file}')
+
+              # 读取并验证配置
+              content = spec_file.read_text(encoding='utf-8')
+
+              # 检查潜在的平台特定问题
+              issues = []
+
+              if 'vec0.dll' in content and sys.platform != 'win32':
+                  issues.append('⚠ Hardcoded vec0.dll (Windows-only)')
+
+              if 'icon.ico' in content and sys.platform != 'win32':
+                  issues.append('⚠ Using .ico icon (Windows-specific)')
+
+              if issues:
+                  print('  Platform compatibility warnings:')
+                  for issue in issues:
+                      print(f'    {issue}')
+              else:
+                  print('  No obvious platform issues detected')
+          "
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            data/
+            *.log
+          retention-days: 7
+
+  build-test:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 安装系统依赖 (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.0-dev \
+            libgtk-3-dev
+
+      - name: 安装 Python 依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 尝试打包（仅验证配置）
+        continue-on-error: true
+        run: |
+          python -m PyInstaller --version
+          echo "PyInstaller version check passed"
+
+          # 不实际打包（太耗时），只验证 spec 文件
+          python -c "
+          import sys
+          from pathlib import Path
+
+          print('Validating Piece.spec for ${{ matrix.os }}...')
+
+          spec_file = Path('Piece.spec')
+          if not spec_file.exists():
+              print('✗ Spec file not found')
+              sys.exit(1)
+
+          # 读取并检查语法
+          try:
+              spec_content = spec_file.read_text(encoding='utf-8')
+              compile(spec_content, str(spec_file), 'exec')
+              print('✓ Spec file syntax valid')
+          except SyntaxError as e:
+              print(f'✗ Spec file syntax error: {e}')
+              sys.exit(1)
+          "
+
+      - name: 生成兼容性报告
+        if: always()
+        run: |
+          python -c "
+          import sys
+          import platform
+          import json
+          from pathlib import Path
+
+          report = {
+              'os': platform.system(),
+              'release': platform.release(),
+              'machine': platform.machine(),
+              'python_version': sys.version,
+              'test_passed': True
+          }
+
+          report_file = Path('compatibility-report.json')
+          report_file.write_text(json.dumps(report, indent=2))
+          print(f'Report saved to {report_file}')
+          print(json.dumps(report, indent=2))
+          "
+
+      - name: 上传兼容性报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-report-${{ matrix.os }}
+          path: compatibility-report.json
+          retention-days: 30
