@@ -5,6 +5,9 @@ data/
 .claude/
 tests/
 .mcp.json
+
+# 允许 GitHub Actions 工作流
+!.github/
 # 打包输出目录
 dist/
 build/
