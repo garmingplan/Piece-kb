@@ -59,6 +59,8 @@ datas += copy_metadata('pydantic')
 datas += copy_metadata('langchain-core')
 datas += copy_metadata('langchain-openai')
 datas += copy_metadata('langgraph')
+datas += copy_metadata('webdav4')
+datas += copy_metadata('markitdown')
 
 # 收集 jieba 词典文件
 datas += collect_data_files('jieba')
@@ -102,6 +104,7 @@ hiddenimports = [
     'openai',
     'jieba',
     'aiofiles',
+    'webdav4',
     'pystray',
     'PIL',
     'PIL.Image',
