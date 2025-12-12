@@ -5,8 +5,9 @@ Piece 应用主入口
 - 初始化数据库
 - 注册 API 路由和 UI 页面
 - 启动后台任务处理器
-- 启动 MCP 检索服务（后台线程）
-- 启动 NiceGUI 桌面应用（native mode）
+- 启动检索 MCP 服务（后台线程，端口 8686）
+- 启动索引 MCP 服务（后台线程，端口 8687）
+- 启动 NiceGUI 桌面应用（native mode，端口 9888）
 
 启动方式:
 - 项目根目录运行: python -m app.server
@@ -52,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 
 def start_mcp_server():
-    """在后台线程中启动 MCP 服务"""
+    """在后台线程中启动检索 MCP 服务"""
     try:
         # 设置环境变量，确保控制台输出支持 UTF-8
         os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
@@ -68,7 +69,7 @@ def start_mcp_server():
         settings = get_settings()
         mcp_port = settings.mcp.port
 
-        logger.info(f"[MCP] Starting Piece MCP service - http://{MCP_HOST}:{mcp_port}/mcp")
+        logger.info(f"[MCP] Starting Piece Retrieval MCP service - http://{MCP_HOST}:{mcp_port}/mcp")
         mcp.run(
             transport="streamable-http",
             host=MCP_HOST,
@@ -76,7 +77,26 @@ def start_mcp_server():
             path="/mcp",
         )
     except Exception as e:
-        logger.error(f"[MCP] Failed to start: {e}", exc_info=True)
+        logger.error(f"[MCP Retrieval] Failed to start: {e}", exc_info=True)
+
+
+def start_index_mcp_server():
+    """在后台线程中启动索引 MCP 服务"""
+    try:
+        from indexing.mcp.server import mcp
+        from indexing.mcp.config import get_mcp_port
+
+        index_mcp_port = get_mcp_port()
+
+        logger.info(f"[MCP Index] Starting Piece Index MCP service - http://{MCP_HOST}:{index_mcp_port}/mcp")
+        mcp.run(
+            transport="streamable-http",
+            host=MCP_HOST,
+            port=index_mcp_port,
+            path="/mcp",
+        )
+    except Exception as e:
+        logger.error(f"[MCP Index] Failed to start: {e}", exc_info=True)
 
 
 def setup():
@@ -102,9 +122,13 @@ def main():
         # 初始化数据库
         init_database()
 
-        # 在后台线程启动 MCP 服务
-        mcp_thread = threading.Thread(target=start_mcp_server, daemon=True)
-        mcp_thread.start()
+        # 在后台线程启动检索 MCP 服务
+        retrieval_mcp_thread = threading.Thread(target=start_mcp_server, daemon=True, name="RetrievalMCP")
+        retrieval_mcp_thread.start()
+
+        # 在后台线程启动索引 MCP 服务
+        index_mcp_thread = threading.Thread(target=start_index_mcp_server, daemon=True, name="IndexMCP")
+        index_mcp_thread.start()
 
     # 初始化服务（主进程和子进程都需要）
     setup()

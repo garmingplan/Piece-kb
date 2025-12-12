@@ -230,8 +230,11 @@ async def process_chunk_update_task(task_id: int) -> None:
         finally:
             conn.close()
 
-        # 清除临时数据，完成任务
-        task_service.update_task_status(task_id, "completed", progress=100, error_message="")
+        # 完成任务，保存 chunk_id 到 error_message（用于返回给客户端）
+        task_service.update_task_status(
+            task_id, "completed", progress=100,
+            error_message=f"CHUNK_ID:{chunk_id}"
+        )
 
     except Exception as e:
         task_service.update_task_status(task_id, "failed", error_message=str(e))
@@ -349,8 +352,11 @@ async def process_chunk_add_task(task_id: int) -> None:
         finally:
             conn.close()
 
-        # 完成任务
-        task_service.update_task_status(task_id, "completed", progress=100, error_message="")
+        # 完成任务，保存 chunk_id 到 error_message（用于返回给客户端）
+        task_service.update_task_status(
+            task_id, "completed", progress=100,
+            error_message=f"CHUNK_ID:{chunk_id}"
+        )
 
     except Exception as e:
         task_service.update_task_status(task_id, "failed", error_message=str(e))

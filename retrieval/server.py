@@ -14,7 +14,7 @@ from .tools import resolve_database_keywords, get_docs
 # 创建FastMCP服务实例
 mcp = FastMCP(
     name="piece-kb",
-    instructions="Piece - Personal knowledge base retrieval service. First call resolve-keywords to find relevant documents, then call get-docs with selected keywords to retrieve content.",
+    instructions="Piece searches user's personal documents. Call resolve-keywords to find relevant documents, then get-docs to retrieve content.",
 )
 
 
@@ -25,8 +25,15 @@ mcp = FastMCP(
 )
 async def resolve_keywords_tool(
     ctx: Context,
-    query: Annotated[str, Field(description="Query text to search for relevant documents")],
-    max_results: Annotated[int, Field(description="Maximum number of keywords to return (default: 20, range: 1-50)")] = 20
+    query: Annotated[
+        str, Field(description="Query text to search for relevant documents")
+    ],
+    max_results: Annotated[
+        int,
+        Field(
+            description="Maximum number of keywords to return (default: 20, range: 1-50)"
+        ),
+    ] = 20,
 ) -> dict:
     await ctx.info(f"[Tool 1] Resolving query: {query}, max_results: {max_results}")
 
@@ -66,17 +73,31 @@ async def resolve_keywords_tool(
 )
 async def get_docs_tool(
     ctx: Context,
-    doc_titles: Annotated[List[str], Field(description="List of doc_titles to retrieve (max 3)")],
-    include_metadata: Annotated[bool, Field(description="Include document metadata in response (default: false)")] = False,
-    max_docs: Annotated[int, Field(description="Maximum number of documents to retrieve (default: 3, max: 3)")] = 3
+    doc_titles: Annotated[
+        List[str], Field(description="List of doc_titles to retrieve (max 3)")
+    ],
+    include_metadata: Annotated[
+        bool,
+        Field(description="Include document metadata in response (default: false)"),
+    ] = False,
+    max_docs: Annotated[
+        int,
+        Field(
+            description="Maximum number of documents to retrieve (default: 3, max: 3)"
+        ),
+    ] = 3,
 ) -> dict:
     # 限制最多3个doc_title
     limit = min(max_docs, 3) if max_docs else 3
     if len(doc_titles) > limit:
-        await ctx.warning(f"[Tool 2] Truncated {len(doc_titles)} doc_titles to top {limit}")
+        await ctx.warning(
+            f"[Tool 2] Truncated {len(doc_titles)} doc_titles to top {limit}"
+        )
         doc_titles = doc_titles[:limit]
 
-    await ctx.info(f"[Tool 2] Retrieving {len(doc_titles)} documents, include_metadata: {include_metadata}")
+    await ctx.info(
+        f"[Tool 2] Retrieving {len(doc_titles)} documents, include_metadata: {include_metadata}"
+    )
 
     try:
         # 调用文档获取函数（同步函数）
@@ -107,7 +128,7 @@ async def get_docs_tool(
             result["metadata"] = {
                 "total_requested": len(doc_titles),
                 "total_found": len(documents),
-                "total_not_found": len(not_found)
+                "total_not_found": len(not_found),
             }
             await ctx.info(f"[Tool 2] Metadata included")
 
