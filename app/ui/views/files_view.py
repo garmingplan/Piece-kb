@@ -211,9 +211,6 @@ def render_files_right(
                             icon="refresh",
                             on_click=lambda: chunk_handlers._reload_chunks() if state["selected_file_id"] else None
                         ).props("flat dense round size=sm").classes("theme-text-muted").tooltip(t("chunks.refresh"))
-                        ui.button(icon="download", on_click=chunk_handlers.handle_export_file).props(
-                            "flat dense round size=sm"
-                        ).classes("text-green-500").tooltip(t("chunks.export"))
                         ui.button(
                             icon="delete_sweep",
                             on_click=chunk_handlers.enter_chunk_batch_mode

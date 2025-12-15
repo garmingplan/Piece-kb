@@ -115,6 +115,7 @@ def init_database(db_path: Path = None) -> None:
 
     try:
         # 1. 创建 files 表（母表：文件物理元数据）
+        # 主表记录工作文件（working/），新增字段记录原始文件（originals/）
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS files (
@@ -123,6 +124,8 @@ def init_database(db_path: Path = None) -> None:
                 filename TEXT NOT NULL,
                 file_path TEXT NOT NULL,
                 file_size INTEGER,
+                original_file_type TEXT,
+                original_file_path TEXT,
                 status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'indexed', 'error', 'empty')),
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP

@@ -37,7 +37,7 @@ from nicegui import app, ui
 from indexing.database import init_database
 from indexing.services.processor import processor
 from indexing.settings import get_settings
-from app.api import register_routes, register_chunk_routes, register_export_routes
+from app.api import register_routes, register_chunk_routes
 from app.api.log_routes import register_log_routes
 from app.ui import register_pages
 
@@ -108,7 +108,6 @@ def setup():
     # 注册 API 路由
     register_routes(app)
     register_chunk_routes(app)
-    register_export_routes(app)
     register_log_routes(app)
 
     # 注册 UI 页面

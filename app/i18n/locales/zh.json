@@ -55,7 +55,6 @@
     "add": "新增切片",
     "edit": "编辑切片",
     "refresh": "刷新",
-    "export": "导出合并文档",
     "delete_confirm_title": "删除切片",
     "delete_confirm_msg": "确定要删除这个切片吗？此操作不可撤销。",
     "deleted": "切片已删除",
@@ -68,8 +67,6 @@
     "add_task_created": "新增切片任务已创建，完成后自动刷新",
     "title_content_required": "标题和内容不能为空",
     "select_file_first": "请先选择一个文件",
-    "export_success": "导出成功: {filename} ({count} 个切片)",
-    "export_failed": "导出失败",
     "batch_delete": "批量删除",
     "batch_select_all": "全选",
     "batch_cancel": "取消",
@@ -147,7 +144,7 @@
   "settings_storage": {
     "title": "数据存储设置",
     "data_path": "数据目录路径",
-    "data_path_hint": "存储数据库、文件和导出文件的根目录（修改后需要重启应用）"
+    "data_path_hint": "存储数据库、原始文件和工作文件的根目录（修改后需要重启应用）"
   },
   "settings_webdav": {
     "title": "云同步设置",

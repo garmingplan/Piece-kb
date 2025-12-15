@@ -122,21 +122,48 @@ async def process_task(task_id: int) -> None:
         )
         return
 
-    file_path = Path(file_info["file_path"])
+    working_file_path = Path(file_info["file_path"])  # 工作文件路径
+    original_file_path = Path(file_info["original_file_path"]) if file_info["original_file_path"] else None
     original_filename = file_info["filename"]
 
     try:
         # 更新状态为处理中
         task_service.update_task_status(task_id, "processing", progress=5)
 
-        # 1. 转换文件为 Markdown 格式
-        content = await asyncio.to_thread(convert_to_markdown, file_path)
+        # 调试日志
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[开始处理] 文件ID: {file_id}, 工作文件: {working_file_path}, 原始文件: {original_file_path}")
+
+        # 检查文件是否存在
+        if original_file_path:
+            logger.info(f"[原始文件检查] 路径: {original_file_path}, 存在: {original_file_path.exists()}")
+        logger.info(f"[工作文件检查] 路径: {working_file_path}, 存在: {working_file_path.exists()}")
+
+        # 1. 从原始文件转换为 Markdown 格式
+        # 如果有原始文件，从原始文件转换；否则直接读取工作文件（应用内新建的情况）
+        if original_file_path and original_file_path.exists():
+            logger.info(f"[转换模式] 从原始文件转换")
+            content = await asyncio.to_thread(convert_to_markdown, original_file_path)
+        else:
+            logger.info(f"[转换模式] 直接读取工作文件")
+            # 应用内新建的文件，直接读取工作文件
+            content = working_file_path.read_text(encoding="utf-8")
+
+        logger.info(f"[转换后] 内容长度: {len(content)}")
+
+        # 将转换后的内容写入工作文件
+        working_file_path.write_text(content, encoding="utf-8")
+
+        logger.info(f"[处理文件] 文件名: {original_filename}, 内容长度: {len(content)}, 前100字符: {content[:100]}")
 
         task_service.update_task_status(task_id, "processing", progress=15)
 
         # 2. 分块处理
         base_name = Path(original_filename).stem
         chunks = split_by_headings(content, base_name)
+
+        logger.info(f"[分块结果] 文件: {original_filename}, 分块数: {len(chunks) if chunks else 0}")
 
         if not chunks:
             file_service.update_file_status(file_id, "error")

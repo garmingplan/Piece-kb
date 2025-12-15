@@ -7,8 +7,8 @@ WebDAV 云同步服务模块
 - 管理同步状态
 
 同步内容:
-- data/files/ - 原始文件
-- data/exports/ - 导出文件
+- data/files/originals/ - 原始文件备份
+- data/files/working/ - 工作文件
 
 同步策略:
 1. 首次同步（last_sync_time 为空）
@@ -96,9 +96,10 @@ class SyncService:
         settings = get_settings()
         data_path = settings.get_data_path()
 
+        files_root = data_path / "files"
         return {
-            "files": data_path / "files",
-            "exports": data_path / "exports",
+            "originals": files_root / "originals",
+            "working": files_root / "working",
         }
 
     def is_enabled(self) -> bool:
@@ -168,8 +169,8 @@ class SyncService:
 
     def _ensure_remote_dirs(self, client: WebDAV4Client):
         """确保所有需要的远程目录存在"""
-        self._ensure_remote_dir(client, "files")
-        self._ensure_remote_dir(client, "exports")
+        self._ensure_remote_dir(client, "originals")
+        self._ensure_remote_dir(client, "working")
 
     def _get_local_files(self, local_dir: Path) -> Dict[str, int]:
         """获取本地文件列表及其大小"""
@@ -257,15 +258,15 @@ class SyncService:
             # 确保远程目录存在
             self._ensure_remote_dirs(client)
 
-            # 双向同步 files 目录
+            # 双向同步 originals 目录
             self._sync_directory(
-                client, local_paths["files"], "files",
+                client, local_paths["originals"], "originals",
                 result, progress_callback
             )
 
-            # 双向同步 exports 目录
+            # 双向同步 working 目录
             self._sync_directory(
-                client, local_paths["exports"], "exports",
+                client, local_paths["working"], "working",
                 result, progress_callback
             )
 

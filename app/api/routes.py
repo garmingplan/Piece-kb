@@ -61,7 +61,7 @@ async def upload_file(file: UploadFile = File(...)):
     if existing_id:
         raise HTTPException(status_code=409, detail="文件已存在，无需重复上传")
 
-    # 保存物理文件
+    # 保存物理文件（原始文件 + 工作文件）
     save_result = await file_service.save_file(file.filename, content)
 
     # 插入 files 表记录
@@ -70,6 +70,8 @@ async def upload_file(file: UploadFile = File(...)):
         filename=save_result["filename"],
         file_path=save_result["file_path"],
         file_size=save_result["file_size"],
+        original_file_type=save_result["original_file_type"],
+        original_file_path=save_result["original_file_path"],
         status="pending"
     )
 

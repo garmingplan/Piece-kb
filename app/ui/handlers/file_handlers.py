@@ -120,6 +120,8 @@ class FileHandlers:
             filename=save_result["filename"],
             file_path=save_result["file_path"],
             file_size=save_result["file_size"],
+            original_file_type=save_result["original_file_type"],
+            original_file_path=save_result["original_file_path"],
             status="pending"
         )
 

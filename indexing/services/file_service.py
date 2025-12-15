@@ -17,15 +17,30 @@ from ..settings import get_settings
 
 
 def get_files_dir() -> Path:
-    """获取文件存储目录"""
+    """获取文件存储根目录"""
     settings = get_settings()
     return settings.get_files_path()
 
 
+def get_originals_dir() -> Path:
+    """获取原始文件存储目录"""
+    return get_files_dir() / "originals"
+
+
+def get_working_dir() -> Path:
+    """获取工作文件存储目录"""
+    return get_files_dir() / "working"
+
+
 def ensure_files_dir() -> Path:
-    """确保文件存储目录存在"""
+    """确保文件存储目录存在（包括子目录）"""
     files_dir = get_files_dir()
     files_dir.mkdir(parents=True, exist_ok=True)
+
+    # 确保 originals 和 working 子目录存在
+    get_originals_dir().mkdir(parents=True, exist_ok=True)
+    get_working_dir().mkdir(parents=True, exist_ok=True)
+
     return files_dir
 
 
@@ -34,19 +49,23 @@ def calculate_file_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def get_unique_filename(original_filename: str) -> str:
+def get_unique_filename(original_filename: str, check_in_working: bool = True) -> str:
     """
     获取唯一文件名，处理同名文件冲突
 
     Args:
         original_filename: 原始文件名
+        check_in_working: 是否在 working 目录中检查（默认 True）
 
     Returns:
         唯一的文件名（如果冲突则添加后缀 _1, _2, ...）
     """
-    files_dir = ensure_files_dir()
+    ensure_files_dir()
 
-    file_path = files_dir / original_filename
+    # 根据参数选择检查目录
+    check_dir = get_working_dir() if check_in_working else get_originals_dir()
+
+    file_path = check_dir / original_filename
     if not file_path.exists():
         return original_filename
 
@@ -57,7 +76,7 @@ def get_unique_filename(original_filename: str) -> str:
 
     while True:
         new_filename = f"{stem}_{counter}{suffix}"
-        new_path = files_dir / new_filename
+        new_path = check_dir / new_filename
         if not new_path.exists():
             return new_filename
         counter += 1
@@ -65,7 +84,11 @@ def get_unique_filename(original_filename: str) -> str:
 
 async def save_file(filename: str, content: bytes) -> Dict[str, Any]:
     """
-    保存文件到 data/files/ 目录
+    保存文件（原始文件 + 工作文件分离）
+
+    流程：
+    1. 保存原始文件到 originals/ 目录
+    2. 创建工作文件到 working/ 目录（初始为空，后续由processor转换填充）
 
     Args:
         filename: 原始文件名
@@ -73,33 +96,63 @@ async def save_file(filename: str, content: bytes) -> Dict[str, Any]:
 
     Returns:
         {
-            "filename": 实际保存的文件名,
-            "file_path": 完整路径,
-            "file_hash": 文件哈希,
-            "file_size": 文件大小
+            "filename": 工作文件名（.md格式）,
+            "file_path": 工作文件完整路径,
+            "file_hash": 原始文件哈希,
+            "file_size": 原始文件大小,
+            "original_file_type": 原始文件类型（md/pdf）,
+            "original_file_path": 原始文件路径
         }
     """
     import aiofiles
+    import logging
 
-    files_dir = ensure_files_dir()
+    logger = logging.getLogger(__name__)
 
-    # 计算哈希
+    ensure_files_dir()
+
+    # 计算原始文件哈希
     file_hash = calculate_file_hash(content)
 
-    # 获取唯一文件名
-    unique_filename = get_unique_filename(filename)
-    file_path = files_dir / unique_filename
+    # 获取原始文件类型
+    file_suffix = Path(filename).suffix.lower()
+    original_file_type = file_suffix.lstrip(".")  # 去掉点号，如 "pdf", "md"
 
-    # 异步写入文件
-    async with aiofiles.open(file_path, "wb") as f:
+    # 1. 保存原始文件到 originals/
+    original_unique_filename = get_unique_filename(filename, check_in_working=False)
+    original_file_path = get_originals_dir() / original_unique_filename
+
+    async with aiofiles.open(original_file_path, "wb") as f:
         await f.write(content)
 
-    return {
-        "filename": unique_filename,
-        "file_path": str(file_path),
+    logger.info(f"[save_file] 原始文件已保存: {original_file_path}")
+
+    # 2. 生成工作文件名（统一为 .md 格式）
+    working_filename_stem = Path(original_unique_filename).stem
+    working_filename = f"{working_filename_stem}.md"
+
+    # 检查 working 目录中的文件名冲突
+    working_unique_filename = get_unique_filename(working_filename, check_in_working=True)
+    working_file_path = get_working_dir() / working_unique_filename
+
+    # 创建空的工作文件（内容由 processor 转换后填充）
+    async with aiofiles.open(working_file_path, "wb") as f:
+        await f.write(b"")
+
+    logger.info(f"[save_file] 工作文件已创建: {working_file_path}")
+
+    result = {
+        "filename": working_unique_filename,
+        "file_path": str(working_file_path),
         "file_hash": file_hash,
         "file_size": len(content),
+        "original_file_type": original_file_type,
+        "original_file_path": str(original_file_path),
     }
+
+    logger.info(f"[save_file] 返回结果: {result}")
+
+    return result
 
 
 def check_file_hash_exists(file_hash: str) -> Optional[int]:
@@ -124,26 +177,52 @@ def insert_file_record(
     filename: str,
     file_path: str,
     file_size: int,
-    status: str = "pending"
+    status: str = "pending",
+    original_file_type: Optional[str] = None,
+    original_file_path: Optional[str] = None
 ) -> int:
     """
     插入文件记录到 files 表
 
+    Args:
+        file_hash: 文件哈希
+        filename: 工作文件名
+        file_path: 工作文件路径
+        file_size: 原始文件大小
+        status: 文件状态
+        original_file_type: 原始文件类型（md/pdf）
+        original_file_path: 原始文件路径
+
     Returns:
         新插入的 file_id
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"[insert_file_record] 准备写入: filename={filename}, original_file_type={original_file_type}, original_file_path={original_file_path}")
+
     conn = get_connection()
     try:
         now = datetime.now().isoformat()
         cursor = conn.execute(
             """
-            INSERT INTO files (file_hash, filename, file_path, file_size, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO files (
+                file_hash, filename, file_path, file_size,
+                original_file_type, original_file_path,
+                status, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (file_hash, filename, file_path, file_size, status, now, now),
+            (file_hash, filename, file_path, file_size,
+             original_file_type, original_file_path,
+             status, now, now),
         )
         conn.commit()
-        return cursor.lastrowid
+        file_id = cursor.lastrowid
+
+        logger.info(f"[insert_file_record] 写入成功: file_id={file_id}")
+
+        return file_id
     finally:
         conn.close()
 
@@ -233,22 +312,26 @@ def delete_file(file_id: int) -> bool:
     """
     删除文件（数据库记录 + 物理文件）
 
-    注意：由于外键级联删除，chunks 表中的相关记录会自动删除
+    同时删除：
+    1. 工作文件（working/）
+    2. 原始文件（originals/）
+    3. 数据库记录（外键级联删除 chunks）
 
     Returns:
         是否删除成功
     """
     conn = get_connection()
     try:
-        # 获取文件路径
+        # 获取文件路径信息
         result = conn.execute(
-            "SELECT file_path FROM files WHERE id = ?", (file_id,)
+            "SELECT file_path, original_file_path FROM files WHERE id = ?", (file_id,)
         ).fetchone()
 
         if not result:
             return False
 
-        file_path = Path(result["file_path"])
+        working_file_path = Path(result["file_path"])
+        original_file_path = Path(result["original_file_path"]) if result["original_file_path"] else None
 
         # 删除 vec_chunks 中的相关记录（需要手动删除，因为没有外键关联）
         conn.execute(
@@ -264,9 +347,13 @@ def delete_file(file_id: int) -> bool:
         conn.execute("DELETE FROM files WHERE id = ?", (file_id,))
         conn.commit()
 
-        # 删除物理文件
-        if file_path.exists():
-            file_path.unlink()
+        # 删除工作文件
+        if working_file_path.exists():
+            working_file_path.unlink()
+
+        # 删除原始文件
+        if original_file_path and original_file_path.exists():
+            original_file_path.unlink()
 
         return True
     finally:
@@ -275,7 +362,7 @@ def delete_file(file_id: int) -> bool:
 
 def create_empty_file(filename: str) -> Dict[str, Any]:
     """
-    创建空 MD 文件
+    创建空 MD 文件（仅工作文件，无原始文件备份）
 
     Args:
         filename: 文件名（如不带后缀会自动补充 .md）
@@ -299,50 +386,48 @@ def create_empty_file(filename: str) -> Dict[str, Any]:
     if not filename.lower().endswith(".md"):
         filename = filename + ".md"
 
-    files_dir = ensure_files_dir()
+    ensure_files_dir()
 
-    # 获取唯一文件名
-    unique_filename = get_unique_filename(filename)
-    file_path = files_dir / unique_filename
+    # 获取唯一文件名（在 working 目录中检查）
+    unique_filename = get_unique_filename(filename, check_in_working=True)
+    working_file_path = get_working_dir() / unique_filename
 
     # 创建空文件
-    file_path.touch()
+    working_file_path.touch()
 
-    # 计算空文件 hash（空内容的 SHA256）
-    file_hash = calculate_file_hash(b"")
-
-    # 检查是否已存在空文件记录（理论上每次 hash 都相同，但允许多个空文件）
-    # 这里用文件名+时间戳生成唯一 hash
+    # 用文件名+时间戳生成唯一 hash（避免多个空文件哈希冲突）
     import time
     unique_hash = calculate_file_hash(f"{unique_filename}_{time.time()}".encode())
 
-    # 插入数据库记录
+    # 插入数据库记录（无原始文件）
     file_id = insert_file_record(
         file_hash=unique_hash,
         filename=unique_filename,
-        file_path=str(file_path),
+        file_path=str(working_file_path),
         file_size=0,
+        original_file_type=None,  # 应用内新建，无原始文件
+        original_file_path=None,
         status="empty"
     )
 
     return {
         "file_id": file_id,
         "filename": unique_filename,
-        "file_path": str(file_path),
+        "file_path": str(working_file_path),
     }
 
 
 def scan_untracked_files() -> List[Dict[str, Any]]:
     """
-    扫描物理文件目录，找出未被数据库记录的文件
+    扫描工作文件目录（working/），找出未被数据库记录的文件
 
     用于云同步后发现新下载的文件
 
     Returns:
         未跟踪文件列表，每项包含 filename, file_path, file_size
     """
-    files_dir = get_files_dir()
-    if not files_dir.exists():
+    working_dir = get_working_dir()
+    if not working_dir.exists():
         return []
 
     # 获取数据库中所有文件名
@@ -353,13 +438,13 @@ def scan_untracked_files() -> List[Dict[str, Any]]:
     finally:
         conn.close()
 
-    # 扫描物理目录
+    # 扫描 working 目录
     untracked = []
-    for file_path in files_dir.iterdir():
+    for file_path in working_dir.iterdir():
         if not file_path.is_file():
             continue
 
-        # 只处理支持的格式
+        # 只处理支持的格式（working 目录应该都是 .md）
         if not (file_path.suffix.lower() in [".md", ".pdf"]):
             continue
 

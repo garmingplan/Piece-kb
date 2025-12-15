@@ -55,7 +55,6 @@
     "add": "Add Chunk",
     "edit": "Edit Chunk",
     "refresh": "Refresh",
-    "export": "Export merged document",
     "delete_confirm_title": "Delete Chunk",
     "delete_confirm_msg": "Are you sure you want to delete this chunk? This action cannot be undone.",
     "deleted": "Chunk deleted",
@@ -68,8 +67,6 @@
     "add_task_created": "Add chunk task created, will refresh when complete",
     "title_content_required": "Title and content are required",
     "select_file_first": "Please select a file first",
-    "export_success": "Export successful: {filename} ({count} chunks)",
-    "export_failed": "Export failed",
     "batch_delete": "Batch Delete",
     "batch_select_all": "Select All",
     "batch_cancel": "Cancel",
@@ -147,7 +144,7 @@
   "settings_storage": {
     "title": "Data Storage Settings",
     "data_path": "Data Directory Path",
-    "data_path_hint": "Auto-creates kb.db and files subdirectory. Restart required after change."
+    "data_path_hint": "Root directory for database, original files and working files (restart required after change)"
   },
   "settings_webdav": {
     "title": "Cloud Sync Settings",

@@ -115,22 +115,3 @@ class ChunkCreateResponse(BaseModel):
     success: bool
     message: str
     task_id: int
-
-
-# ========== 导出相关 ==========
-
-class ExportResponse(BaseModel):
-    """文件导出响应"""
-    success: bool
-    message: str
-    export_path: str
-    filename: str
-    chunk_count: int
-
-
-class ExportFileInfo(BaseModel):
-    """导出文件信息"""
-    filename: str
-    file_path: str
-    file_size: int
-    modified_at: float

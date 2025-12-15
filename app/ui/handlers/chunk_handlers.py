@@ -5,12 +5,11 @@
 - 切片编辑
 - 切片删除
 - 切片新增
-- 切片导出
 """
 
 from nicegui import ui
 
-from indexing.services import chunk_service, export_service
+from indexing.services import chunk_service
 from app.i18n import t
 from app.ui.components import chunk_edit_dialog, chunk_add_dialog, confirm_dialog
 
@@ -130,21 +129,6 @@ class ChunkHandlers:
         ui.notify(t("chunks.add_task_created"), type="positive")
         self.on_task_created(task_id)
         self.on_refresh_files()
-
-    def handle_export_file(self):
-        """导出当前文件"""
-        if self.state["selected_file_id"] is None:
-            ui.notify(t("chunks.select_file_first"), type="warning")
-            return
-
-        result = export_service.export_file_chunks(self.state["selected_file_id"])
-        if result["success"]:
-            ui.notify(
-                t("chunks.export_success", filename=result['filename'], count=result['chunk_count']),
-                type="positive",
-            )
-        else:
-            ui.notify(result.get("error", t("chunks.export_failed")), type="negative")
 
     def _reload_chunks(self):
         """重新加载当前文件的切片"""

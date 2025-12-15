@@ -9,6 +9,7 @@ Chunk 服务模块
 
 import asyncio
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from langchain_openai import OpenAIEmbeddings
@@ -18,6 +19,55 @@ from ..settings import get_embedding_config
 from ..utils import serialize_float32
 from . import task_service
 from . import file_service
+
+
+# ========== 工作文件同步 ==========
+
+
+def rebuild_working_file(file_id: int) -> None:
+    """
+    根据数据库中的切片重建工作文件
+
+    将文件的所有切片按照 doc_title 重建为 Markdown 格式并写入工作文件
+
+    Args:
+        file_id: 文件 ID
+    """
+    # 获取文件信息
+    file_info = file_service.get_file_by_id(file_id)
+    if not file_info:
+        return
+
+    working_file_path = Path(file_info["file_path"])
+
+    # 获取所有切片
+    chunks = file_service.get_chunks_by_file_id(file_id)
+    if not chunks:
+        # 没有切片，清空工作文件
+        working_file_path.write_text("", encoding="utf-8")
+        return
+
+    # 重建 Markdown 内容
+    lines = []
+    for chunk in chunks:
+        doc_title = chunk["doc_title"]
+        chunk_text = chunk["chunk_text"]
+
+        # 根据 doc_title 中的下划线数量判断标题级别
+        # 格式: "文件名_章节" 或 "文件名_章节_小节"
+        title_parts = doc_title.split("_")
+
+        if len(title_parts) == 2:
+            # 二级标题
+            lines.append(f"## {title_parts[1]}\n\n")
+        elif len(title_parts) >= 3:
+            # 三级标题
+            lines.append(f"### {title_parts[-1]}\n\n")
+
+        lines.append(f"{chunk_text}\n\n")
+
+    # 写入工作文件
+    working_file_path.write_text("".join(lines), encoding="utf-8")
 
 
 # ========== 查询操作 ==========
@@ -95,13 +145,16 @@ def delete_chunk(chunk_id: int) -> Dict[str, Any]:
         conn.execute("DELETE FROM chunks WHERE id = ?", (chunk_id,))
 
         conn.commit()
+
+        # 5. 重建工作文件
+        conn.close()
+        rebuild_working_file(file_id)
+
         return {"success": True, "file_id": file_id, "file_deleted": False}
 
     except Exception:
         conn.close()
         raise
-    else:
-        conn.close()
 
 
 # ========== 修改操作 ==========
@@ -116,13 +169,15 @@ def update_chunk_title(chunk_id: int, doc_title: str) -> Optional[Dict[str, Any]
     """
     conn = get_connection()
     try:
-        # 检查 chunk 是否存在
+        # 检查 chunk 是否存在并获取 file_id
         existing = conn.execute(
-            "SELECT id FROM chunks WHERE id = ?", (chunk_id,)
+            "SELECT id, file_id FROM chunks WHERE id = ?", (chunk_id,)
         ).fetchone()
 
         if not existing:
             return None
+
+        file_id = existing["file_id"]
 
         # 更新标题（FTS5 触发器自动同步）
         conn.execute(
@@ -131,11 +186,16 @@ def update_chunk_title(chunk_id: int, doc_title: str) -> Optional[Dict[str, Any]
         )
         conn.commit()
 
+        # 重建工作文件
+        conn.close()
+        rebuild_working_file(file_id)
+
         # 返回更新后的 chunk
         return get_chunk_by_id(chunk_id)
 
-    finally:
+    except Exception:
         conn.close()
+        raise
 
 
 def create_chunk_update_task(chunk_id: int, chunk_text: str) -> int:
@@ -214,6 +274,16 @@ async def process_chunk_update_task(task_id: int) -> None:
         # 更新数据库
         conn = get_connection()
         try:
+            # 获取 file_id
+            file_id_row = conn.execute(
+                "SELECT file_id FROM chunks WHERE id = ?", (chunk_id,)
+            ).fetchone()
+
+            if not file_id_row:
+                raise Exception("Chunk 不存在")
+
+            file_id = file_id_row["file_id"]
+
             # 更新 chunks 表（FTS5 触发器自动同步）
             conn.execute(
                 "UPDATE chunks SET chunk_text = ?, embedding = ? WHERE id = ?",
@@ -229,6 +299,9 @@ async def process_chunk_update_task(task_id: int) -> None:
             conn.commit()
         finally:
             conn.close()
+
+        # 重建工作文件
+        rebuild_working_file(file_id)
 
         # 完成任务，保存 chunk_id 到 error_message（用于返回给客户端）
         task_service.update_task_status(
@@ -351,6 +424,9 @@ async def process_chunk_add_task(task_id: int) -> None:
             conn.commit()
         finally:
             conn.close()
+
+        # 重建工作文件
+        rebuild_working_file(file_id)
 
         # 完成任务，保存 chunk_id 到 error_message（用于返回给客户端）
         task_service.update_task_status(
