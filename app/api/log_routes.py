@@ -12,7 +12,7 @@ from app.logging_config import get_log_buffer, clear_log_buffer
 from app.api.models import ApiResponse
 
 
-def register_log_routes(app: nicegui_app):
+def register_log_routes(app):
     """注册日志 API 路由"""
 
     @app.get("/api/logs")

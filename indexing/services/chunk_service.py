@@ -53,16 +53,29 @@ def rebuild_working_file(file_id: int) -> None:
         doc_title = chunk["doc_title"]
         chunk_text = chunk["chunk_text"]
 
+        # 检查 chunk_text 是否已经包含标题（以 # 开头）
+        if chunk_text.strip().startswith('#'):
+            # chunk_text 已包含标题，直接输出
+            lines.append(f"{chunk_text}\n\n")
+            continue
+
         # 根据 doc_title 中的下划线数量判断标题级别
         # 格式: "文件名_章节" 或 "文件名_章节_小节"
         title_parts = doc_title.split("_")
 
         if len(title_parts) == 2:
             # 二级标题
-            lines.append(f"## {title_parts[1]}\n\n")
+            clean_title = title_parts[1].lstrip('#').strip()
+            lines.append(f"## {clean_title}\n\n")
         elif len(title_parts) >= 3:
             # 三级标题
-            lines.append(f"### {title_parts[-1]}\n\n")
+            clean_title = title_parts[-1].lstrip('#').strip()
+            lines.append(f"### {clean_title}\n\n")
+        else:
+            # 兜底：doc_title 格式不规范（无下划线或只有文件名）
+            # 使用完整的 doc_title 作为二级标题
+            clean_title = doc_title.lstrip('#').strip()
+            lines.append(f"## {clean_title}\n\n")
 
         lines.append(f"{chunk_text}\n\n")
 
