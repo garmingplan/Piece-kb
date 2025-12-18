@@ -82,7 +82,7 @@ def render_files_middle(
             on_upload=file_handlers.handle_upload,
             auto_upload=True,
             multiple=True,
-        ).props("accept=.md,.pdf").classes("hidden")
+        ).props("accept=.md,.pdf,.pptx,.xlsx,.docx,.txt").classes("hidden")
 
         # 搜索框
         with ui.row().classes("w-full px-2 py-2"):

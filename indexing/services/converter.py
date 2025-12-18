@@ -18,8 +18,8 @@ from markitdown import MarkItDown
 SUPPORTED_FORMATS = {".md", ".pdf", ".docx", ".pptx", ".xlsx"}
 
 # PDF 处理限制
-MAX_PDF_PAGES = 1000  # 最大页数限制
-PDF_BATCH_SIZE = 20  # 每批处理的页数
+MAX_PDF_PAGES = 500  # 最大页数限制（减小到 500 页）
+PDF_BATCH_SIZE = 10  # 每批处理的页数（减小到 10 页）
 
 
 def convert_pdf_to_markdown(file_path: Path) -> str:

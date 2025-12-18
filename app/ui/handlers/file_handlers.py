@@ -11,6 +11,7 @@
 from nicegui import ui, events
 
 from indexing.services import file_service, task_service
+from indexing.services.chunking import ChunkerFactory
 from app.i18n import t
 from app.ui.components import confirm_dialog, file_create_dialog
 from app.utils import format_size, MAX_FILE_SIZE
@@ -92,9 +93,18 @@ class FileHandlers:
         filename = e.file.name
         filename_lower = filename.lower()
 
-        # 检查格式
-        if not (filename_lower.endswith(".md") or filename_lower.endswith(".pdf")):
-            ui.notify(t("files.upload_only_md"), type="negative")
+        # 获取文件扩展名
+        file_ext = None
+        for ext in [".pptx", ".xlsx", ".docx", ".pdf", ".txt", ".md"]:
+            if filename_lower.endswith(ext):
+                file_ext = ext
+                break
+
+        # 检查格式 - 使用 ChunkerFactory 支持的扩展名
+        supported_extensions = ChunkerFactory.get_supported_extensions()
+        if file_ext not in supported_extensions:
+            supported_str = ", ".join(supported_extensions)
+            ui.notify(t("files.upload_unsupported", formats=supported_str), type="negative")
             return
 
         content = await e.file.read()

@@ -6,7 +6,7 @@ from . import file_service
 from . import task_service
 from . import chunk_service
 from . import converter
-from . import chunker
+from . import chunking
 from .processor import processor, TaskProcessor
 
 __all__ = [
@@ -14,7 +14,7 @@ __all__ = [
     "task_service",
     "chunk_service",
     "converter",
-    "chunker",
+    "chunking",
     "processor",
     "TaskProcessor",
 ]

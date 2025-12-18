@@ -18,7 +18,7 @@ from ..settings import get_embedding_config
 from ..utils import serialize_float32
 from . import task_service, file_service, chunk_service
 from .converter import convert_to_markdown
-from .chunker import split_by_headings
+from .chunking import ChunkerFactory
 
 
 # ========== 向量生成 ==========
@@ -159,9 +159,29 @@ async def process_task(task_id: int) -> None:
 
         task_service.update_task_status(task_id, "processing", progress=15)
 
-        # 2. 分块处理
+        # 2. 分块处理 - 使用工厂模式根据文件类型选择分块器
         base_name = Path(original_filename).stem
-        chunks = split_by_headings(content, base_name)
+
+        # 优先使用原始文件类型（如 pptx），如果没有则使用工作文件扩展名（如 md）
+        original_file_type = file_info.get("original_file_type")
+        if original_file_type:
+            file_extension = f".{original_file_type}"  # 添加点号前缀
+        else:
+            # 应用内新建的文件，使用工作文件扩展名
+            file_extension = working_file_path.suffix.lower()
+
+        logger.info(f"[分块策略] 文件: {original_filename}, 原始类型: {original_file_type}, 扩展名: {file_extension}")
+
+        try:
+            chunker = ChunkerFactory.get_chunker(file_extension)
+            chunks = chunker.chunk(content, base_name)
+        except ValueError as e:
+            logger.error(f"[分块失败] {e}")
+            file_service.update_file_status(file_id, "error")
+            task_service.update_task_status(
+                task_id, "failed", error_message=str(e)
+            )
+            return
 
         logger.info(f"[分块结果] 文件: {original_filename}, 分块数: {len(chunks) if chunks else 0}")
 
