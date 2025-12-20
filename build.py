@@ -13,7 +13,6 @@ Piece 打包脚本
     dist/Piece.zip
 """
 
-import os
 import sys
 import shutil
 import subprocess
@@ -24,8 +23,9 @@ from datetime import datetime
 # 设置 UTF-8 编码（修复 GitHub Actions Windows 环境的编码问题）
 if sys.platform == "win32":
     import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 
 # 项目根目录
@@ -114,6 +114,7 @@ def create_zip():
     version = "0.1.0"
     try:
         import json
+
         zh_json = PROJECT_ROOT / "app" / "i18n" / "locales" / "zh.json"
         if zh_json.exists():
             data = json.loads(zh_json.read_text(encoding="utf-8"))
