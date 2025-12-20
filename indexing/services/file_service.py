@@ -419,40 +419,62 @@ def create_empty_file(filename: str) -> Dict[str, Any]:
 
 def scan_untracked_files() -> List[Dict[str, Any]]:
     """
-    扫描工作文件目录（working/），找出未被数据库记录的文件
+    扫描原始文件目录（originals/），找出未被数据库记录的文件
 
-    用于云同步后发现新下载的文件
+    用于云同步后发现新下载的原始文件，并关联/创建对应的工作文件
 
     Returns:
-        未跟踪文件列表，每项包含 filename, file_path, file_size
+        未跟踪文件列表，每项包含:
+        - original_filename: 原始文件名
+        - original_file_path: 原始文件完整路径
+        - original_file_type: 原始文件类型（不带点号，如 "pdf"）
+        - original_file_size: 原始文件大小
+        - working_filename: 工作文件名（.md格式）
+        - working_file_path: 工作文件完整路径
     """
+    originals_dir = get_originals_dir()
     working_dir = get_working_dir()
-    if not working_dir.exists():
+
+    if not originals_dir.exists():
         return []
 
-    # 获取数据库中所有文件名
+    # 确保 working 目录存在
+    working_dir.mkdir(parents=True, exist_ok=True)
+
+    # 获取数据库中所有已跟踪的原始文件路径
     conn = get_connection()
     try:
-        rows = conn.execute("SELECT filename FROM files").fetchall()
-        tracked_filenames = {row["filename"] for row in rows}
+        rows = conn.execute("SELECT original_file_path FROM files WHERE original_file_path IS NOT NULL").fetchall()
+        tracked_originals = {row["original_file_path"] for row in rows}
     finally:
         conn.close()
 
-    # 扫描 working 目录
+    # 扫描 originals 目录
     untracked = []
-    for file_path in working_dir.iterdir():
-        if not file_path.is_file():
+    supported_exts = [".md", ".pdf", ".pptx", ".xlsx", ".docx", ".txt"]
+
+    for original_file in originals_dir.iterdir():
+        if not original_file.is_file():
             continue
 
-        # 只处理支持的格式（working 目录应该都是 .md）
-        if not (file_path.suffix.lower() in [".md", ".pdf"]):
+        # 检查文件扩展名
+        file_ext = original_file.suffix.lower()
+        if file_ext not in supported_exts:
             continue
 
-        if file_path.name not in tracked_filenames:
+        # 如果原始文件未被跟踪
+        if str(original_file) not in tracked_originals:
+            # 生成对应的工作文件路径
+            working_filename = f"{original_file.stem}.md"
+            working_file_path = working_dir / working_filename
+
             untracked.append({
-                "filename": file_path.name,
-                "file_path": str(file_path),
-                "file_size": file_path.stat().st_size,
+                "original_filename": original_file.name,
+                "original_file_path": str(original_file),
+                "original_file_type": file_ext.lstrip("."),  # 去掉点号
+                "original_file_size": original_file.stat().st_size,
+                "working_filename": working_filename,
+                "working_file_path": str(working_file_path),
             })
 
     return untracked

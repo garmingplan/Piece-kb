@@ -303,9 +303,19 @@ class FileHandlers:
         """
         扫描物理目录，为云同步下载的新文件创建索引任务
 
+        扫描 originals/ 目录，为每个未被跟踪的原始文件：
+        1. 读取原始文件计算哈希
+        2. 创建对应的工作文件（初始为空）
+        3. 写入数据库记录（包含双文件信息）
+        4. 创建索引任务（由 processor 转换并填充工作文件）
+
         Returns:
             新创建的任务数量
         """
+        import logging
+        from pathlib import Path
+
+        logger = logging.getLogger(__name__)
         untracked_files = file_service.scan_untracked_files()
 
         if not untracked_files:
@@ -313,37 +323,50 @@ class FileHandlers:
 
         task_count = 0
         for file_info in untracked_files:
-            # 读取文件内容计算哈希
-            file_path = file_info["file_path"]
+            # 读取原始文件内容计算哈希
+            original_file_path = file_info["original_file_path"]
             try:
-                with open(file_path, "rb") as f:
+                with open(original_file_path, "rb") as f:
                     content = f.read()
                 file_hash = file_service.calculate_file_hash(content)
 
                 # 检查哈希是否已存在（避免重复）
                 if file_service.check_file_hash_exists(file_hash):
+                    logger.info(f"[Scan] 跳过已存在文件: {file_info['original_filename']}")
                     continue
 
-                # 插入文件记录
+                # 创建空的工作文件（如果不存在）
+                working_file_path = Path(file_info["working_file_path"])
+                if not working_file_path.exists():
+                    working_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    working_file_path.touch()
+                    logger.info(f"[Scan] 创建工作文件: {working_file_path}")
+
+                # 插入文件记录（包含完整的双文件信息）
                 file_id = file_service.insert_file_record(
                     file_hash=file_hash,
-                    filename=file_info["filename"],
-                    file_path=file_path,
-                    file_size=file_info["file_size"],
+                    filename=file_info["working_filename"],              # 工作文件名（.md）
+                    file_path=file_info["working_file_path"],            # 工作文件路径
+                    file_size=file_info["original_file_size"],           # 原始文件大小
+                    original_file_type=file_info["original_file_type"],  # 原始文件类型（不带点号）
+                    original_file_path=file_info["original_file_path"],  # 原始文件路径
                     status="pending"
                 )
 
                 # 创建索引任务
-                task_id = task_service.create_task(file_info["filename"])
+                task_id = task_service.create_task(file_info["original_filename"])
                 task_service.update_task_status(task_id, "pending", file_id=file_id)
 
                 # 通知任务监控
                 self.on_task_created(task_id)
                 task_count += 1
 
+                logger.info(f"[Scan] 成功创建索引任务: {file_info['original_filename']}")
+
             except Exception as e:
                 # 单个文件失败不影响其他文件
-                ui.notify(f"索引失败: {file_info['filename']}: {e}", type="negative")
+                logger.error(f"[Scan] 索引失败: {file_info['original_filename']}: {e}", exc_info=True)
+                ui.notify(f"索引失败: {file_info['original_filename']}: {e}", type="negative")
                 continue
 
         return task_count
