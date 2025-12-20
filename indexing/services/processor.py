@@ -19,6 +19,7 @@ from ..utils import serialize_float32
 from . import task_service, file_service, chunk_service
 from .converter import convert_to_markdown
 from .chunking import ChunkerFactory
+from .rate_limiter import get_rate_limiter
 
 
 # ========== 向量生成 ==========
@@ -144,7 +145,23 @@ async def process_task(task_id: int) -> None:
         # 如果有原始文件，从原始文件转换；否则直接读取工作文件（应用内新建的情况）
         if original_file_path and original_file_path.exists():
             logger.info(f"[转换模式] 从原始文件转换")
-            content = await asyncio.to_thread(convert_to_markdown, original_file_path)
+
+            # 定义 PDF 转换进度回调
+            def pdf_progress_callback(current_page: int, total_pages: int):
+                # 转换阶段占 5%-15%，映射到进度条
+                progress = 5 + int(10 * current_page / total_pages)
+                task_service.update_task_status(task_id, "processing", progress=progress)
+
+            # 检查是否是 PDF 文件
+            if original_file_path.suffix.lower() == '.pdf':
+                from .converter import convert_pdf_to_markdown
+                content = await asyncio.to_thread(
+                    convert_pdf_to_markdown,
+                    original_file_path,
+                    pdf_progress_callback
+                )
+            else:
+                content = await asyncio.to_thread(convert_to_markdown, original_file_path)
         else:
             logger.info(f"[转换模式] 直接读取工作文件")
             # 应用内新建的文件，直接读取工作文件
@@ -206,22 +223,71 @@ async def process_task(task_id: int) -> None:
         embeddings_model = OpenAIEmbeddings(**config)
         texts = [chunk["chunk_text"] for chunk in chunks]
 
+        # 获取速率限制器
+        rate_limiter = get_rate_limiter()
+        logger.info(f"[向量生成] 速率限制器已初始化: RPM={rate_limiter.rpm}, 最小间隔={rate_limiter.min_interval}s")
+
         # 分批生成向量，更新进度
         embeddings_list = []
-        batch_size = 20
+        batch_size = 5  # 降低批次大小到 5，减少单次请求 token 数
         total_batches = (len(texts) + batch_size - 1) // batch_size
+
+        logger.info(f"[向量生成] 开始生成向量: {len(texts)} 个切片, {total_batches} 批次")
 
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
-            batch_embeddings = await asyncio.to_thread(
-                embeddings_model.embed_documents, batch
-            )
-            embeddings_list.extend(batch_embeddings)
+
+            # 请求速率许可（每个批次消耗 1 个令牌）
+            logger.info(f"[向量生成] 批次 {i // batch_size + 1}: 请求速率许可")
+            await rate_limiter.acquire(1)
+            logger.info(f"[向量生成] 批次 {i // batch_size + 1}: 许可已获取，开始生成向量")
+
+            # 生成向量（带重试）
+            max_retries = 3
+            retry_delay = 5  # 秒
+
+            for retry in range(max_retries):
+                try:
+                    batch_embeddings = await asyncio.to_thread(
+                        embeddings_model.embed_documents, batch
+                    )
+                    embeddings_list.extend(batch_embeddings)
+                    break  # 成功，退出重试循环
+
+                except Exception as e:
+                    error_msg = str(e).lower()
+
+                    # 判断是否是速率限制错误
+                    if "429" in error_msg or "403" in error_msg or "rate limit" in error_msg:
+                        if retry < max_retries - 1:
+                            wait_time = retry_delay * (retry + 1)  # 递增等待时间
+                            logger.warning(
+                                f"[向量生成] API 速率限制错误，{wait_time}秒后重试 "
+                                f"(第 {retry+1}/{max_retries} 次)"
+                            )
+                            await asyncio.sleep(wait_time)
+                        else:
+                            logger.error(f"[向量生成] 重试 {max_retries} 次后仍失败: {e}")
+                            raise
+                    else:
+                        # 非速率限制错误，直接抛出
+                        logger.error(f"[向量生成] API 调用失败: {e}")
+                        raise
 
             # 更新进度 (30% - 80%)
             batch_idx = i // batch_size + 1
             progress = 30 + int(50 * batch_idx / total_batches)
             task_service.update_task_status(task_id, "processing", progress=progress)
+
+            # 日志记录（每 50 批次）
+            if batch_idx % 50 == 0:
+                stats = rate_limiter.get_stats()
+                logger.info(
+                    f"[向量生成] 进度: {batch_idx}/{total_batches} 批次 "
+                    f"(RPM 限制: {stats['rpm']}, 间隔: {stats['min_interval']:.3f}s)"
+                )
+
+        logger.info(f"[向量生成] 完成: 共生成 {len(embeddings_list)} 个向量")
 
         # 4. 写入数据库
         task_service.update_task_status(task_id, "processing", progress=85)

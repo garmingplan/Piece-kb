@@ -19,6 +19,7 @@ from ..settings import get_embedding_config
 from ..utils import serialize_float32
 from . import task_service
 from . import file_service
+from .rate_limiter import get_rate_limiter
 
 
 # ========== 工作文件同步 ==========
@@ -275,6 +276,10 @@ async def process_chunk_update_task(task_id: int) -> None:
 
         task_service.update_task_status(task_id, "processing", progress=30)
 
+        # 请求速率许可
+        rate_limiter = get_rate_limiter()
+        await rate_limiter.acquire(1)
+
         # 生成新的 embedding
         embeddings_model = OpenAIEmbeddings(**config)
         embedding = await asyncio.to_thread(
@@ -398,6 +403,10 @@ async def process_chunk_add_task(task_id: int) -> None:
             return
 
         task_service.update_task_status(task_id, "processing", progress=30)
+
+        # 请求速率许可
+        rate_limiter = get_rate_limiter()
+        await rate_limiter.acquire(1)
 
         # 生成 embedding
         embeddings_model = OpenAIEmbeddings(**config)

@@ -12,7 +12,6 @@ langgraph==0.6.8
 # 数据验证和序列化（让pip自动解析依赖）
 pydantic==2.11.7
 markitdown[all]==0.1.4
-pymupdf4llm==0.2.5
 
 # HTTP客户端和嵌入模型调用
 httpx==0.28.1
@@ -20,7 +19,8 @@ openai==1.109.1
 jieba==0.42.1
 
 # 异步文件操作
-aiofiles==24.1.0
+aiofiles==24.1.0  
+rich==14.2.0
 webdav4==0.10.0
 # GUI框架
 nicegui==3.3.1
