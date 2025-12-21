@@ -78,6 +78,8 @@ class FileHandlers:
         """加载选中文件的切片"""
         self.state["selected_file_id"] = file_id
         self.state["chunks_data"] = file_service.get_chunks_by_file_id(file_id) or []
+        # 重置分页到第一页
+        self.state["chunk_page"] = 1
 
         if self.ui_refs.get("file_list_container"):
             self.ui_refs["file_list_container"].refresh()

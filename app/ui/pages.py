@@ -46,6 +46,9 @@ def register_pages():
             "files_data": [],
             "filtered_files": [],
             "chunks_data": [],
+            # 切片分页状态
+            "chunk_page": 1,
+            "chunk_page_size": 50,
         }
 
         # 云同步状态

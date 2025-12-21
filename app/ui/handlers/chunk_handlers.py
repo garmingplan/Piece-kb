@@ -137,8 +137,54 @@ class ChunkHandlers:
             self.state["chunks_data"] = file_service.get_chunks_by_file_id(
                 self.state["selected_file_id"]
             ) or []
+            # 重置分页到第一页
+            self.state["chunk_page"] = 1
             if self.ui_refs.get("chunk_inspector"):
                 self.ui_refs["chunk_inspector"].refresh()
+
+    # ==================== 分页功能 ====================
+
+    def go_to_chunk_page(self, page: int):
+        """跳转到指定页"""
+        total_pages = self.get_total_chunk_pages()
+        if page < 1:
+            page = 1
+        elif page > total_pages:
+            page = total_pages
+        self.state["chunk_page"] = page
+        if self.ui_refs.get("chunk_inspector"):
+            self.ui_refs["chunk_inspector"].refresh()
+
+    def prev_chunk_page(self):
+        """上一页"""
+        if self.state["chunk_page"] > 1:
+            self.state["chunk_page"] -= 1
+            if self.ui_refs.get("chunk_inspector"):
+                self.ui_refs["chunk_inspector"].refresh()
+
+    def next_chunk_page(self):
+        """下一页"""
+        total_pages = self.get_total_chunk_pages()
+        if self.state["chunk_page"] < total_pages:
+            self.state["chunk_page"] += 1
+            if self.ui_refs.get("chunk_inspector"):
+                self.ui_refs["chunk_inspector"].refresh()
+
+    def get_total_chunk_pages(self) -> int:
+        """获取总页数"""
+        total_chunks = len(self.state["chunks_data"])
+        page_size = self.state["chunk_page_size"]
+        if total_chunks == 0:
+            return 1
+        return (total_chunks + page_size - 1) // page_size
+
+    def get_visible_chunks(self) -> list:
+        """获取当前页可见的切片"""
+        page = self.state["chunk_page"]
+        page_size = self.state["chunk_page_size"]
+        start = (page - 1) * page_size
+        end = start + page_size
+        return self.state["chunks_data"][start:end]
 
     # ==================== 批量删除功能 ====================
 
@@ -175,23 +221,27 @@ class ChunkHandlers:
             self.ui_refs["chunk_inspector"].refresh()
 
     def toggle_chunk_select_all(self):
-        """全选/取消全选切片"""
-        chunk_ids = {c["id"] for c in self.state["chunks_data"]}
-        if self.state["chunk_batch_selected_ids"] == chunk_ids:
-            self.state["chunk_batch_selected_ids"] = set()
+        """全选/取消全选切片（仅当前页）"""
+        visible_chunks = self.get_visible_chunks()
+        visible_chunk_ids = {c["id"] for c in visible_chunks}
+        if visible_chunk_ids.issubset(self.state["chunk_batch_selected_ids"]):
+            # 当前页全部选中，取消选中
+            self.state["chunk_batch_selected_ids"] -= visible_chunk_ids
         else:
-            self.state["chunk_batch_selected_ids"] = chunk_ids
+            # 选中当前页所有切片
+            self.state["chunk_batch_selected_ids"] |= visible_chunk_ids
         if self.ui_refs.get("chunk_toolbar_buttons"):
             self.ui_refs["chunk_toolbar_buttons"].refresh()
         if self.ui_refs.get("chunk_inspector"):
             self.ui_refs["chunk_inspector"].refresh()
 
     def is_all_chunks_selected(self) -> bool:
-        """检查是否全选切片"""
-        if not self.state["chunks_data"]:
+        """检查当前页是否全选"""
+        visible_chunks = self.get_visible_chunks()
+        if not visible_chunks:
             return False
-        chunk_ids = {c["id"] for c in self.state["chunks_data"]}
-        return self.state["chunk_batch_selected_ids"] == chunk_ids
+        visible_chunk_ids = {c["id"] for c in visible_chunks}
+        return visible_chunk_ids.issubset(self.state["chunk_batch_selected_ids"])
 
     def confirm_chunk_batch_delete(self):
         """确认批量删除切片"""

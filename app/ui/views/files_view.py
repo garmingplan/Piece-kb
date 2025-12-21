@@ -246,8 +246,11 @@ def render_files_right(
                 chunk_batch_mode = state.get("chunk_batch_mode", False)
                 chunk_batch_selected_ids = state.get("chunk_batch_selected_ids", set())
 
+                # 获取当前页的切片
+                visible_chunks = chunk_handlers.get_visible_chunks()
+
                 with ui.column().classes("w-full min-w-0"):
-                    for chunk in state["chunks_data"]:
+                    for chunk in visible_chunks:
                         chunk_id = chunk["id"]
                         is_batch_selected = chunk_id in chunk_batch_selected_ids
 
@@ -277,6 +280,39 @@ def render_files_right(
                                 on_edit=chunk_handlers.handle_edit_chunk,
                                 on_delete=chunk_handlers.handle_delete_chunk,
                             )
+
+                    # 分页控件
+                    total_chunks = len(state["chunks_data"])
+                    if total_chunks > state["chunk_page_size"]:
+                        current_page = state["chunk_page"]
+                        total_pages = chunk_handlers.get_total_chunk_pages()
+                        start_idx = (current_page - 1) * state["chunk_page_size"] + 1
+                        end_idx = min(current_page * state["chunk_page_size"], total_chunks)
+
+                        with ui.row().classes("w-full items-center justify-between mt-4 pt-4").style("border-top: 1px solid var(--border-color)"):
+                            # 左侧：统计信息
+                            ui.label(t("chunks.pagination_info", start=start_idx, end=end_idx, total=total_chunks)).classes("text-xs theme-text-muted")
+
+                            # 右侧：分页按钮
+                            with ui.row().classes("items-center gap-2"):
+                                # 上一页按钮
+                                ui.button(
+                                    icon="chevron_left",
+                                    on_click=chunk_handlers.prev_chunk_page
+                                ).props("flat dense round size=sm").classes("theme-text-muted").props(
+                                    "disable" if current_page == 1 else ""
+                                )
+
+                                # 页码显示
+                                ui.label(t("chunks.pagination_page", current=current_page, total=total_pages)).classes("text-sm theme-text")
+
+                                # 下一页按钮
+                                ui.button(
+                                    icon="chevron_right",
+                                    on_click=chunk_handlers.next_chunk_page
+                                ).props("flat dense round size=sm").classes("theme-text-muted").props(
+                                    "disable" if current_page == total_pages else ""
+                                )
 
             ui_refs["chunk_inspector"] = chunk_inspector
             chunk_inspector()

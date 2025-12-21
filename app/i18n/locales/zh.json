@@ -74,7 +74,9 @@
     "batch_none_selected": "请至少选择一个切片",
     "batch_delete_confirm_title": "批量删除切片",
     "batch_delete_confirm_msg": "确定要删除选中的 {count} 个切片吗？\n\n此操作不可撤销。",
-    "batch_deleted": "已删除 {count} 个切片"
+    "batch_deleted": "已删除 {count} 个切片",
+    "pagination_info": "显示 {start}-{end} / 共 {total} 条",
+    "pagination_page": "第 {current} / {total} 页"
   },
   "chunk_dialog": {
     "edit_title": "编辑切片 #{id}",

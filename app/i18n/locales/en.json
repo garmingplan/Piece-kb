@@ -74,7 +74,9 @@
     "batch_none_selected": "Please select at least one chunk",
     "batch_delete_confirm_title": "Batch Delete Chunks",
     "batch_delete_confirm_msg": "Are you sure you want to delete {count} selected chunks?\n\nThis action cannot be undone.",
-    "batch_deleted": "{count} chunks deleted"
+    "batch_deleted": "{count} chunks deleted",
+    "pagination_info": "Showing {start}-{end} / {total} total",
+    "pagination_page": "Page {current} / {total}"
   },
   "chunk_dialog": {
     "edit_title": "Edit Chunk #{id}",
