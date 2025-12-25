@@ -303,8 +303,31 @@ def render_files_right(
                                     "disable" if current_page == 1 else ""
                                 )
 
-                                # 页码显示
-                                ui.label(t("chunks.pagination_page", current=current_page, total=total_pages)).classes("text-sm theme-text")
+                                # 页码输入框
+                                with ui.row().classes("items-center gap-1"):
+                                    page_input = ui.input(
+                                        value=str(current_page),
+                                        placeholder=str(current_page)
+                                    ).props("dense outlined").classes("text-sm text-center").style(
+                                        "width: 50px"
+                                    )
+
+                                    # 回车键跳转
+                                    def handle_page_jump(e):
+                                        try:
+                                            page = int(page_input.value)
+                                            if 1 <= page <= total_pages:
+                                                chunk_handlers.go_to_chunk_page(page)
+                                            else:
+                                                ui.notify(f"页码必须在 1-{total_pages} 之间", type="warning")
+                                                page_input.value = str(current_page)
+                                        except ValueError:
+                                            ui.notify("请输入有效的页码", type="warning")
+                                            page_input.value = str(current_page)
+
+                                    page_input.on('keydown.enter', handle_page_jump)
+
+                                    ui.label(f"/ {total_pages}").classes("text-sm theme-text-muted")
 
                                 # 下一页按钮
                                 ui.button(

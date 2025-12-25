@@ -9,6 +9,7 @@ from .base import BaseChunker
 from .heading_chunker import HeadingChunker
 from .slide_chunker import SlideChunker
 from .sheet_chunker import SheetChunker
+from .page_chunker import PageChunker
 
 
 class ChunkerFactory:
@@ -16,12 +17,13 @@ class ChunkerFactory:
 
     # 文件扩展名 -> 分块器映射
     _chunker_map: Dict[str, Type[BaseChunker]] = {
-        # PPT 使用 SlideChunker
+        # PPT 使用 SlideChunker（按 Slide 切分）
         ".pptx": SlideChunker,
-        # Excel 使用 SheetChunker
+        # Excel 使用 SheetChunker（按 Sheet 切分）
         ".xlsx": SheetChunker,
-        # PDF、Markdown、Word、TXT 使用 HeadingChunker
-        ".pdf": HeadingChunker,
+        # PDF 使用 PageChunker（按页切分）
+        ".pdf": PageChunker,
+        # Markdown、Word、TXT 使用 HeadingChunker（按标题切分）
         ".md": HeadingChunker,
         ".docx": HeadingChunker,
         ".txt": HeadingChunker,
