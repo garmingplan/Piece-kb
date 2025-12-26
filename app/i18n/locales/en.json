@@ -132,6 +132,8 @@
     "api_key": "API Key",
     "model": "Model Name",
     "vector_dim": "Vector Dimension",
+    "max_tokens": "Max Context Length",
+    "max_tokens_tooltip": "Maximum tokens supported by the model (BGE-M3: 8192, Ada-002: 8191). System will auto-calculate chunk size based on this value",
     "test_btn": "Test Connection",
     "testing": "Testing...",
     "test_success": "Connected, dimension: {dim}",

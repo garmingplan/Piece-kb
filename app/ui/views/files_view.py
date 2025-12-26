@@ -111,6 +111,13 @@ def render_files_middle(
                     is_selected = file_id == state["selected_file_id"]
                     is_batch_selected = file_id in batch_selected_ids
 
+                    # 检查是否有进行中的任务（通过 file_id 匹配）
+                    task_progress = None
+                    for task_id, progress_info in state.get("task_progress", {}).items():
+                        if progress_info.get("file_id") == file_id:
+                            task_progress = progress_info
+                            break
+
                     container_classes = "w-full px-3 py-2 cursor-pointer transition-colors border-l-4 "
                     if batch_mode and is_batch_selected:
                         container_classes += "theme-border-selected theme-selected"
@@ -144,17 +151,28 @@ def render_files_middle(
                                 ).tooltip(f["filename"])
                                 status_badge(f["status"])
                         else:
-                            # 普通模式：原有布局
-                            with ui.element("div").classes(
-                                "grid items-center gap-2"
-                            ).style("grid-template-columns: auto 1fr auto"):
-                                ui.icon("description", size="xs").classes(
-                                    "theme-text-accent" if is_selected else "theme-text-muted"
-                                )
-                                ui.label(f["filename"]).classes(
-                                    "text-sm truncate theme-text"
-                                ).tooltip(f["filename"])
-                                status_badge(f["status"])
+                            # 普通模式：显示文件名和状态
+                            with ui.column().classes("w-full gap-1"):
+                                with ui.element("div").classes(
+                                    "grid items-center gap-2"
+                                ).style("grid-template-columns: auto 1fr auto"):
+                                    ui.icon("description", size="xs").classes(
+                                        "theme-text-accent" if is_selected else "theme-text-muted"
+                                    )
+                                    ui.label(f["filename"]).classes(
+                                        "text-sm truncate theme-text"
+                                    ).tooltip(f["filename"])
+                                    status_badge(f["status"])
+
+                                # 如果有进行中的任务，显示进度条
+                                if task_progress and task_progress["status"] in ["pending", "processing"]:
+                                    progress_value = task_progress["progress"]
+                                    with ui.row().classes("w-full items-center gap-2"):
+                                        ui.linear_progress(
+                                            value=progress_value / 100,
+                                            show_value=False,
+                                        ).props("size=2px color=primary").classes("flex-1")
+                                        ui.label(f"{progress_value}%").classes("text-xs theme-text-muted")
 
             # 保存引用以便外部刷新
             ui_refs["file_list_container"] = file_list_container

@@ -89,11 +89,16 @@ def get_rate_limiter() -> RateLimiter:
     """获取全局速率限制器实例"""
     global _rate_limiter
     if _rate_limiter is None:
-        # 实名认证后配置：RPM=120（留 10% TPM 安全余量）
+        # 硅基流动实名认证后限制：RPM=2000, TPM=500,000
+        #
         # 计算依据：
-        # - TPM 限制：500,000
-        # - 每批 5 切片 × 750 tokens = 3,750 tokens/请求
-        # - 理论最大：500,000 ÷ 3,750 = 133 RPM
-        # - 安全配置：120 RPM（450,000 TPM，90% 利用率）
-        _rate_limiter = RateLimiter(rpm=120)
+        # - TPM 限制：500,000 tokens/分钟（真正的瓶颈）
+        # - 平均切片大小：约 2000 tokens（考虑中英文混合）
+        # - 批次大小：10 个切片/请求（processor.py 中配置）
+        # - 每请求 tokens：10 × 2000 = 20,000 tokens
+        # - 理论最大 RPM：500,000 ÷ 20,000 = 25 RPM
+        # - 安全配置：20 RPM（400,000 TPM，80% 利用率）
+        #
+        # 实际吞吐量：20 RPM × 10 切片 = 200 切片/分钟
+        _rate_limiter = RateLimiter(rpm=20)
     return _rate_limiter

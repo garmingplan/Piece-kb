@@ -13,6 +13,10 @@ from .utils import recursive_split, clean_heading
 class HeadingChunker(BaseChunker):
     """按标题层级切分文档"""
 
+    def __init__(self):
+        """初始化分块器"""
+        super().__init__()
+
     def chunk(self, content: str, base_name: str) -> List[Dict[str, str]]:
         """
         按二级标题切分文档
@@ -51,8 +55,8 @@ class HeadingChunker(BaseChunker):
             if not chunk_content:
                 continue
 
-            # 超过 2000 字，按三级标题切分
-            if len(chunk_content) > 2000:
+            # 超过最大分块大小，按三级标题切分
+            if len(chunk_content) > self.max_chunk_size:
                 sub_chunks = self._split_large_chunk(chunk_content, base_name, h2_name)
                 chunks.extend(sub_chunks)
             else:
@@ -62,9 +66,9 @@ class HeadingChunker(BaseChunker):
 
         return chunks
 
-    def _split_by_length(self, content: str, base_name: str, chunk_size: int = 800) -> List[Dict]:
+    def _split_by_length(self, content: str, base_name: str) -> List[Dict]:
         """按递归字符切分文档（用于无标题文档）"""
-        text_chunks = recursive_split(content, chunk_size=chunk_size)
+        text_chunks = recursive_split(content, chunk_size=self.max_chunk_size)
 
         chunks = []
         for i, chunk_text in enumerate(text_chunks):
@@ -80,13 +84,13 @@ class HeadingChunker(BaseChunker):
         return chunks
 
     def _split_large_chunk(self, chunk_content: str, base_name: str, h2_name: str) -> List[Dict]:
-        """处理超过2000字的大分块，按三级标题切分，仍过长则递归切分"""
+        """处理超过最大分块大小的大分块，按三级标题切分，仍过长则递归切分"""
         h3_pattern = r"^###\s+(.+)$"
         h3_matches = list(re.finditer(h3_pattern, chunk_content, re.MULTILINE))
 
         if not h3_matches:
             # 无三级标题，使用递归切分
-            text_chunks = recursive_split(chunk_content, chunk_size=800)
+            text_chunks = recursive_split(chunk_content, chunk_size=self.max_chunk_size)
             chunks = []
             for i, chunk_text in enumerate(text_chunks):
                 sub_title = chunk_text.strip()[:10].replace("\n", " ")
@@ -105,8 +109,8 @@ class HeadingChunker(BaseChunker):
             intro_content = chunk_content[: h3_matches[0].start()].strip()
             if intro_content:
                 # 引言部分过长也需要递归切分
-                if len(intro_content) > 800:
-                    text_chunks = recursive_split(intro_content, chunk_size=800)
+                if len(intro_content) > self.max_chunk_size:
+                    text_chunks = recursive_split(intro_content, chunk_size=self.max_chunk_size)
                     for i, chunk_text in enumerate(text_chunks):
                         sub_title = chunk_text.strip()[:10].replace("\n", " ")
                         chunks.append(
@@ -131,8 +135,8 @@ class HeadingChunker(BaseChunker):
 
             if h3_content:
                 # 三级标题内容过长，递归切分
-                if len(h3_content) > 800:
-                    text_chunks = recursive_split(h3_content, chunk_size=800)
+                if len(h3_content) > self.max_chunk_size:
+                    text_chunks = recursive_split(h3_content, chunk_size=self.max_chunk_size)
                     for j, chunk_text in enumerate(text_chunks):
                         if j == 0:
                             # 第一个切片保留完整标题

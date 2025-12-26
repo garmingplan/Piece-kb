@@ -114,6 +114,29 @@ def get_pending_tasks() -> List[Dict[str, Any]]:
         conn.close()
 
 
+def get_active_tasks() -> List[Dict[str, Any]]:
+    """
+    获取所有活跃的任务（pending 或 processing）
+
+    用于页面加载时恢复任务监控
+
+    Returns:
+        活跃任务列表
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT * FROM tasks
+            WHERE status IN ('pending', 'processing')
+            ORDER BY created_at ASC
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
 def get_tasks_list(
     status: Optional[str] = None,
     limit: int = 50

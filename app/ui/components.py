@@ -214,21 +214,33 @@ def confirm_dialog(
     danger: bool = False,
 ):
     """
-    确认对话框
+    确认对话框（支持同步和异步回调）
 
     Args:
         title: 对话框标题
         message: 提示信息
-        on_confirm: 确认回调
+        on_confirm: 确认回调（支持同步和异步函数）
         confirm_text: 确认按钮文字
         cancel_text: 取消按钮文字
         danger: 是否为危险操作（红色按钮）
     """
+    import asyncio
+    import inspect
+
     # 使用默认翻译文本
     if confirm_text is None:
         confirm_text = t("confirm_dialog.btn_confirm")
     if cancel_text is None:
         cancel_text = t("confirm_dialog.btn_cancel")
+
+    # 包装回调函数，支持异步
+    async def handle_confirm():
+        if inspect.iscoroutinefunction(on_confirm):
+            await on_confirm()
+        else:
+            on_confirm()
+        dialog.close()
+
     with ui.dialog() as dialog, ui.card().classes("w-[400px] theme-card"):
         with ui.row().classes(
             "w-full items-center justify-between pb-2"
@@ -244,7 +256,7 @@ def confirm_dialog(
             btn_props = "color=red" if danger else "color=primary"
             ui.button(
                 confirm_text,
-                on_click=lambda: [on_confirm(), dialog.close()],
+                on_click=handle_confirm,
             ).props(btn_props)
 
     dialog.open()

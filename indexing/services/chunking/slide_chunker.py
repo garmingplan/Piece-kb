@@ -9,10 +9,15 @@ import re
 from typing import List, Dict
 from .base import BaseChunker
 from .heading_chunker import HeadingChunker
+from .utils import recursive_split
 
 
 class SlideChunker(BaseChunker):
     """按幻灯片切分文档"""
+
+    def __init__(self):
+        """初始化分块器"""
+        super().__init__()
 
     def chunk(self, content: str, base_name: str) -> List[Dict[str, str]]:
         """
@@ -59,12 +64,22 @@ class SlideChunker(BaseChunker):
             slide_content = self._remove_notes_section(slide_content)
 
             if slide_content:
-                chunks.append(
-                    {
+                # 检查单页大小是否超过限制
+                if len(slide_content) > self.max_chunk_size:
+                    # 超大页面：递归切分为多个部分
+                    sub_chunks = recursive_split(slide_content, chunk_size=self.max_chunk_size)
+                    for j, sub_chunk in enumerate(sub_chunks, start=1):
+                        if sub_chunk.strip():
+                            chunks.append({
+                                "doc_title": f"{base_name}_第{slide_num}页_第{j}部分",
+                                "chunk_text": sub_chunk.strip(),
+                            })
+                else:
+                    # 正常大小：一页一个切片
+                    chunks.append({
                         "doc_title": f"{base_name}_第{slide_num}页",
                         "chunk_text": slide_content,
-                    }
-                )
+                    })
 
         return chunks
 

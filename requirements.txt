@@ -18,10 +18,11 @@ httpx==0.28.1
 openai==1.109.1
 jieba==0.42.1
 
-# 异步文件操作
-aiofiles==24.1.0  
+# 异步文件操作和工具
+aiofiles>=24.0.0
 rich==14.2.0
 webdav4==0.10.0
+
 # GUI框架
 nicegui==3.3.1
 pywebview==6.1

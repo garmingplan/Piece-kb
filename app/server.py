@@ -151,6 +151,12 @@ def main():
         window_size=(1100, 700),  # 窗口大小
         fullscreen=False,
         favicon=str(icon_path) if icon_path.exists() else None,  # 设置图标（文件存在时）
+        # NiceGUI 连接配置（支持长时间操作）
+        reconnect_timeout=30.0,  # 重连超时：30 秒（默认 3 秒）
+        # Uvicorn 超时配置（支持大文件上传）
+        timeout_keep_alive=300,  # Keep-alive 超时：5 分钟
+        ws_ping_timeout=300,     # WebSocket ping 超时：5 分钟
+        timeout_notify=300,      # 通知超时：5 分钟
     )
 
 

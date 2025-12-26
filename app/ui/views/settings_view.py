@@ -201,6 +201,17 @@ def _render_embedding_settings(settings_form: dict, settings_handlers):
                 on_change=lambda e: settings_form.update({"vector_dim": e.value}),
             ).props("dense outlined").classes("w-full")
 
+            ui.number(
+                label=t("settings_embedding.max_tokens"),
+                value=settings_form.get("max_tokens", 8192),
+                min=512,
+                max=32768,
+                step=512,
+                on_change=lambda e: settings_form.update({"max_tokens": e.value}),
+            ).props("dense outlined").classes("w-full").tooltip(
+                t("settings_embedding.max_tokens_tooltip")
+            )
+
             # 测试连接
             with ui.row().classes("w-full items-center justify-between"):
                 test_result = ui.label("").classes("text-xs flex-1 theme-text-muted")

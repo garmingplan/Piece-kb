@@ -275,13 +275,16 @@ class FileHandlers:
             danger=True,
         )
 
-    def _do_batch_delete(self):
-        """执行批量删除"""
+    async def _do_batch_delete(self):
+        """执行批量删除（异步优化，避免阻塞界面）"""
+        import asyncio
+
         deleted_count = 0
         ids_to_delete = list(self.state["batch_selected_ids"])
 
+        # 异步批量删除，避免阻塞界面
         for file_id in ids_to_delete:
-            success = file_service.delete_file(file_id)
+            success = await asyncio.to_thread(file_service.delete_file, file_id)
             if success:
                 deleted_count += 1
 
@@ -301,12 +304,12 @@ class FileHandlers:
 
     # ==================== 扫描并索引新文件 ====================
 
-    def scan_and_index_new_files(self) -> int:
+    async def scan_and_index_new_files(self) -> int:
         """
-        扫描物理目录，为云同步下载的新文件创建索引任务
+        扫描物理目录，为云同步下载的新文件创建索引任务（异步优化，避免阻塞界面）
 
         扫描 originals/ 目录，为每个未被跟踪的原始文件：
-        1. 读取原始文件计算哈希
+        1. 异步读取原始文件计算哈希
         2. 创建对应的工作文件（初始为空）
         3. 写入数据库记录（包含双文件信息）
         4. 创建索引任务（由 processor 转换并填充工作文件）
@@ -315,10 +318,14 @@ class FileHandlers:
             新创建的任务数量
         """
         import logging
+        import asyncio
+        import aiofiles
         from pathlib import Path
 
         logger = logging.getLogger(__name__)
-        untracked_files = file_service.scan_untracked_files()
+
+        # 异步扫描未跟踪文件
+        untracked_files = await asyncio.to_thread(file_service.scan_untracked_files)
 
         if not untracked_files:
             return 0
@@ -328,12 +335,20 @@ class FileHandlers:
             # 读取原始文件内容计算哈希
             original_file_path = file_info["original_file_path"]
             try:
-                with open(original_file_path, "rb") as f:
-                    content = f.read()
-                file_hash = file_service.calculate_file_hash(content)
+                # 异步读取文件（避免阻塞界面）
+                async with aiofiles.open(original_file_path, "rb") as f:
+                    content = await f.read()
+
+                # 在线程池中计算哈希（CPU 密集型操作）
+                file_hash = await asyncio.to_thread(
+                    file_service.calculate_file_hash, content
+                )
 
                 # 检查哈希是否已存在（避免重复）
-                if file_service.check_file_hash_exists(file_hash):
+                existing_id = await asyncio.to_thread(
+                    file_service.check_file_hash_exists, file_hash
+                )
+                if existing_id:
                     logger.info(f"[Scan] 跳过已存在文件: {file_info['original_filename']}")
                     continue
 
@@ -341,11 +356,13 @@ class FileHandlers:
                 working_file_path = Path(file_info["working_file_path"])
                 if not working_file_path.exists():
                     working_file_path.parent.mkdir(parents=True, exist_ok=True)
-                    working_file_path.touch()
+                    async with aiofiles.open(working_file_path, "wb") as f:
+                        await f.write(b"")
                     logger.info(f"[Scan] 创建工作文件: {working_file_path}")
 
                 # 插入文件记录（包含完整的双文件信息）
-                file_id = file_service.insert_file_record(
+                file_id = await asyncio.to_thread(
+                    file_service.insert_file_record,
                     file_hash=file_hash,
                     filename=file_info["working_filename"],              # 工作文件名（.md）
                     file_path=file_info["working_file_path"],            # 工作文件路径
@@ -356,8 +373,12 @@ class FileHandlers:
                 )
 
                 # 创建索引任务
-                task_id = task_service.create_task(file_info["original_filename"])
-                task_service.update_task_status(task_id, "pending", file_id=file_id)
+                task_id = await asyncio.to_thread(
+                    task_service.create_task, file_info["original_filename"]
+                )
+                await asyncio.to_thread(
+                    task_service.update_task_status, task_id, "pending", file_id=file_id
+                )
 
                 # 通知任务监控
                 self.on_task_created(task_id)
@@ -373,10 +394,10 @@ class FileHandlers:
 
         return task_count
 
-    def refresh_and_scan(self):
-        """刷新文件列表并扫描新文件"""
-        # 先扫描并索引新文件
-        new_count = self.scan_and_index_new_files()
+    async def refresh_and_scan(self):
+        """刷新文件列表并扫描新文件（异步优化）"""
+        # 先扫描并索引新文件（异步）
+        new_count = await self.scan_and_index_new_files()
 
         # 刷新文件列表
         self.load_files()

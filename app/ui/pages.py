@@ -268,5 +268,6 @@ def register_pages():
         # ========== 初始化 ==========
         file_handlers.load_files()
         file_handlers.load_stats()
+        task_handlers.init_active_tasks()  # 恢复进行中的任务
 
         ui.timer(1.0, task_handlers.check_pending_tasks)

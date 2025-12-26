@@ -15,12 +15,15 @@ from .utils import recursive_split
 class SheetChunker(BaseChunker):
     """按 Excel Sheet 切分文档"""
 
-    # 大型 Sheet 的阈值（10000 字符）
-    LARGE_SHEET_THRESHOLD = 10000
-    # 大型 Sheet 的分块大小
-    LARGE_SHEET_CHUNK_SIZE = 2000
-    # 大型 Sheet 的重叠窗口
-    LARGE_SHEET_OVERLAP = 200
+    def __init__(self):
+        """初始化分块器，动态计算阈值"""
+        super().__init__()
+        # 大型 Sheet 阈值：2倍最大分块大小
+        self.LARGE_SHEET_THRESHOLD = self.max_chunk_size * 2
+        # 大型 Sheet 的分块大小：使用配置的最大分块大小
+        self.LARGE_SHEET_CHUNK_SIZE = self.max_chunk_size
+        # 大型 Sheet 的重叠窗口：10% 的分块大小
+        self.LARGE_SHEET_OVERLAP = int(self.max_chunk_size * 0.1)
 
     def chunk(self, content: str, base_name: str) -> List[Dict[str, str]]:
         """

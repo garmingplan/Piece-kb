@@ -119,8 +119,8 @@ def convert_pdf_to_markdown(
             # 释放页面对象（控制内存）
             page = None
 
-            # 进度回调（每 50 页报告一次）
-            if progress_callback and (page_num + 1) % 50 == 0:
+            # 进度回调（每 10 页报告一次，减少数据库压力）
+            if progress_callback and (page_num + 1) % 10 == 0:
                 progress_callback(page_num + 1, total_pages)
                 logger.info(f"[PDF转换] 进度: {page_num + 1}/{total_pages} 页")
 
@@ -129,6 +129,10 @@ def convert_pdf_to_markdown(
             markdown_parts.append(
                 f"\n\n---\n**[Page {page_num + 1} - 转换失败: {str(e)[:50]}]**\n---\n\n"
             )
+
+    # 最后一次进度回调（确保 100% 完成）
+    if progress_callback:
+        progress_callback(total_pages, total_pages)
 
     doc.close()
     logger.info(f"[PDF转换] 完成: {file_path.name}")

@@ -132,6 +132,8 @@
     "api_key": "API Key",
     "model": "模型名称",
     "vector_dim": "向量维度",
+    "max_tokens": "最大上下文长度",
+    "max_tokens_tooltip": "模型支持的最大 Token 数（BGE-M3: 8192, Ada-002: 8191）。系统会根据此值自动计算分块大小",
     "test_btn": "测试连接",
     "testing": "测试中...",
     "test_success": "连接成功，向量维度: {dim}",

@@ -11,6 +11,12 @@ from typing import List, Dict
 class BaseChunker(ABC):
     """分块策略基类"""
 
+    def __init__(self):
+        """初始化分块器，从配置中读取最大分块大小"""
+        from ...settings import get_chunking_config
+        config = get_chunking_config()
+        self.max_chunk_size = config["max_chunk_size"]
+
     @abstractmethod
     def chunk(self, content: str, base_name: str) -> List[Dict[str, str]]:
         """

@@ -48,6 +48,7 @@ class EmbeddingSettings(BaseModel):
     api_key: str = ""
     model: str = "BAAI/bge-m3"
     vector_dim: int = 1024
+    max_tokens: int = 8192  # 模型最大上下文长度
 
 
 class McpSettings(BaseModel):
@@ -247,4 +248,23 @@ def get_webdav_config() -> dict:
         "username": settings.webdav.username,
         "password": settings.webdav.password,
         "last_sync_time": settings.webdav.last_sync_time,
+    }
+
+
+def get_chunking_config() -> dict:
+    """
+    获取分块配置
+
+    根据嵌入模型的 max_tokens 自动计算最大分块大小。
+    公式：max_chunk_size = max_tokens * 0.8 / 1.5
+    - 0.8 是安全系数（使用 80% 容量）
+    - 1.5 是字符→Token 转换系数（保守估计）
+
+    Returns:
+        dict: 包含 max_chunk_size（字符数）
+    """
+    settings = get_settings()  # 使用缓存
+    max_chunk_size = int(settings.embedding.max_tokens * 0.8 / 1.5)
+    return {
+        "max_chunk_size": max_chunk_size,
     }

@@ -36,6 +36,7 @@ class SettingsHandlers:
             "api_key": settings.embedding.api_key,
             "model": settings.embedding.model,
             "vector_dim": settings.embedding.vector_dim,
+            "max_tokens": settings.embedding.max_tokens,
             "mcp_port": settings.mcp.port,
             "data_path": settings.data_path,
             "theme": settings.appearance.theme,
@@ -57,6 +58,7 @@ class SettingsHandlers:
                     api_key=self.settings_form["api_key"],
                     model=self.settings_form["model"],
                     vector_dim=int(self.settings_form["vector_dim"]),
+                    max_tokens=int(self.settings_form.get("max_tokens", 8192)),
                 ),
                 mcp=McpSettings(port=int(self.settings_form["mcp_port"])),
                 appearance=AppearanceSettings(
