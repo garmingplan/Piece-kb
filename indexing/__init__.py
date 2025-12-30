@@ -11,6 +11,18 @@ Indexing 模块 - 文件索引服务
 注意: 前端 UI 和 API 路由已迁移至 app/ 模块
 """
 
-from .database import init_database, get_connection, get_db_info
+from .database import (
+    init_database,
+    get_db_info,
+    init_connection_pool,
+    close_connection_pool,
+    get_db_cursor,
+)
 
-__all__ = ["init_database", "get_connection", "get_db_info"]
+__all__ = [
+    "init_database",
+    "get_db_info",
+    "init_connection_pool",
+    "close_connection_pool",
+    "get_db_cursor",
+]

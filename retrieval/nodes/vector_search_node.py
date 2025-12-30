@@ -5,7 +5,7 @@ import struct
 from typing import List
 from langchain_openai import OpenAIEmbeddings
 from .state import State, SearchResult
-from ..db import get_connection
+from ..db import get_db_cursor
 from ..config import config, get_embedding_config
 
 
@@ -16,7 +16,7 @@ def serialize_float32(vector: List[float]) -> bytes:
 
 def vector_search_node(state: State) -> dict:
     """
-    向量检索节点（sqlite-vec）
+    向量检索节点（sqlite-vec，使用连接池）
 
     功能：
     1. 将查询文本向量化
@@ -48,10 +48,8 @@ def vector_search_node(state: State) -> dict:
         query_embedding = embeddings.embed_query(cleaned_query)
         query_blob = serialize_float32(query_embedding)
 
-        # 连接数据库
-        conn = get_connection()
-
-        try:
+        # 使用连接池
+        with get_db_cursor() as cursor:
             # 使用sqlite-vec进行向量检索
             # vec_chunks 的 chunk_id 对应 chunks 表的 id
             # vec_distance_cosine 返回余弦距离（0-2），转换为相似度（1 - distance/2）
@@ -65,7 +63,7 @@ def vector_search_node(state: State) -> dict:
                 LIMIT ?
             """
 
-            cursor = conn.execute(
+            cursor.execute(
                 query_sql,
                 (query_blob, query_blob, config.search.vector_top_k),
             )
@@ -82,10 +80,8 @@ def vector_search_node(state: State) -> dict:
                 "vector_results": vector_results,
             }
 
-        finally:
-            conn.close()
-
     except Exception as e:
         return {
             "error": f"向量检索失败: {str(e)}",
         }
+

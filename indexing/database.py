@@ -18,11 +18,17 @@ import os
 import sys
 import sqlite3
 import logging
+import threading
 from pathlib import Path
+from contextlib import contextmanager
 
 from .settings import get_settings, get_vector_dim
 
 logger = logging.getLogger(__name__)
+
+# 全局连接池（线程安全）
+_connection_pool = None
+_pool_lock = threading.Lock()
 
 
 def _get_sqlite_vec_path() -> str:
@@ -65,36 +71,98 @@ def get_db_path() -> Path:
     return settings.get_db_path()
 
 
-def get_connection(db_path: Path = None) -> sqlite3.Connection:
+def init_connection_pool(db_path: Path = None) -> None:
     """
-    获取数据库连接，自动加载 sqlite-vec 扩展
+    初始化数据库连接池（应用启动时调用一次）
+
+    连接池使用单一长连接 + check_same_thread=False，适合读多写少场景
 
     Args:
         db_path: 数据库文件路径，默认使用配置路径
-
-    Returns:
-        sqlite3.Connection: 已加载扩展的数据库连接
     """
-    if db_path is None:
-        db_path = get_db_path()
+    global _connection_pool
 
-    # 确保 data 目录存在
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with _pool_lock:
+        if _connection_pool is not None:
+            logger.warning("[DB Pool] 连接池已存在，跳过初始化")
+            return
 
-    # 创建连接
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
+        if db_path is None:
+            db_path = get_db_path()
 
-    # 启用 WAL 模式
-    conn.execute("PRAGMA journal_mode=WAL")
+        # 确保 data 目录存在
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 启用外键约束
-    conn.execute("PRAGMA foreign_keys=ON")
+        # 创建长连接（check_same_thread=False 允许多线程共享）
+        _connection_pool = sqlite3.connect(
+            str(db_path),
+            check_same_thread=False,
+            timeout=30.0  # 增加超时时间
+        )
+        _connection_pool.row_factory = sqlite3.Row
 
-    # 加载 sqlite-vec 扩展
-    _load_sqlite_vec(conn)
+        # 启用 WAL 模式（支持并发读写）
+        _connection_pool.execute("PRAGMA journal_mode=WAL")
 
-    return conn
+        # 启用外键约束
+        _connection_pool.execute("PRAGMA foreign_keys=ON")
+
+        # 性能优化
+        _connection_pool.execute("PRAGMA synchronous=NORMAL")  # 平衡性能与安全
+        _connection_pool.execute("PRAGMA cache_size=-64000")   # 64MB 缓存
+        _connection_pool.execute("PRAGMA temp_store=MEMORY")   # 临时表使用内存
+
+        # 加载 sqlite-vec 扩展
+        _load_sqlite_vec(_connection_pool)
+
+        logger.info(f"[DB Pool] 连接池初始化成功: {db_path}")
+
+
+def close_connection_pool() -> None:
+    """关闭数据库连接池（应用关闭时调用）"""
+    global _connection_pool
+
+    with _pool_lock:
+        if _connection_pool is not None:
+            _connection_pool.close()
+            _connection_pool = None
+            logger.info("[DB Pool] 连接池已关闭")
+
+
+@contextmanager
+def get_db_cursor():
+    """
+    获取数据库游标（上下文管理器，推荐使用）
+
+    使用方式:
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT * FROM files")
+            rows = cursor.fetchall()
+
+    特性:
+    - 自动提交/回滚事务
+    - 线程安全（使用锁保护）
+    - 复用连接池连接
+
+    Yields:
+        sqlite3.Cursor: 数据库游标
+    """
+    global _connection_pool
+
+    # 如果连接池未初始化，先初始化
+    if _connection_pool is None:
+        init_connection_pool()
+
+    with _pool_lock:
+        cursor = _connection_pool.cursor()
+        try:
+            yield cursor
+            _connection_pool.commit()
+        except Exception:
+            _connection_pool.rollback()
+            raise
+        finally:
+            cursor.close()
 
 
 def init_database(db_path: Path = None) -> None:
@@ -111,9 +179,22 @@ def init_database(db_path: Path = None) -> None:
     if db_path is None:
         db_path = get_db_path()
 
-    conn = get_connection(db_path)
+    # 确保 data 目录存在
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 创建临时连接（仅用于初始化）
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
 
     try:
+        # 启用 WAL 模式
+        conn.execute("PRAGMA journal_mode=WAL")
+
+        # 启用外键约束
+        conn.execute("PRAGMA foreign_keys=ON")
+
+        # 加载 sqlite-vec 扩展
+        _load_sqlite_vec(conn)
         # 1. 创建 files 表（母表：文件物理元数据）
         # 主表记录工作文件（working/），新增字段记录原始文件（originals/）
         conn.execute(
@@ -244,7 +325,7 @@ def init_database(db_path: Path = None) -> None:
 
 def get_db_info(db_path: Path = None) -> dict:
     """
-    获取数据库信息
+    获取数据库信息（使用连接池）
 
     Returns:
         dict: 包含版本信息和表统计的字典
@@ -252,16 +333,13 @@ def get_db_info(db_path: Path = None) -> dict:
     if db_path is None:
         db_path = get_db_path()
 
-    conn = get_connection(db_path)
-
-    try:
-        sqlite_version = conn.execute("SELECT sqlite_version()").fetchone()[0]
-        vec_version = conn.execute("SELECT vec_version()").fetchone()[0]
+    with get_db_cursor() as cursor:
+        sqlite_version = cursor.execute("SELECT sqlite_version()").fetchone()[0]
+        vec_version = cursor.execute("SELECT vec_version()").fetchone()[0]
 
         # 检查表是否存在
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = cursor.fetchall()
         table_names = [t[0] for t in tables]
 
         file_count = 0
@@ -269,13 +347,16 @@ def get_db_info(db_path: Path = None) -> dict:
         vec_count = 0
 
         if "files" in table_names:
-            file_count = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM files")
+            file_count = cursor.fetchone()[0]
 
         if "chunks" in table_names:
-            chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM chunks")
+            chunk_count = cursor.fetchone()[0]
 
         if "vec_chunks" in table_names:
-            vec_count = conn.execute("SELECT COUNT(*) FROM vec_chunks").fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM vec_chunks")
+            vec_count = cursor.fetchone()[0]
 
         return {
             "sqlite_version": sqlite_version,
@@ -286,9 +367,6 @@ def get_db_info(db_path: Path = None) -> dict:
             "vec_count": vec_count,
             "tables": table_names,
         }
-
-    finally:
-        conn.close()
 
 
 if __name__ == "__main__":

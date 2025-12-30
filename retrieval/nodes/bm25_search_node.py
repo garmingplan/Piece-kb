@@ -4,13 +4,13 @@ BM25检索节点：使用SQLite FTS5对chunk_text字段进行全文检索
 """
 from typing import List
 from .state import State, SearchResult
-from ..db import get_connection
+from ..db import get_db_cursor
 from ..config import config
 
 
 def bm25_search_node(state: State) -> dict:
     """
-    BM25检索节点（SQLite FTS5）
+    BM25检索节点（SQLite FTS5，使用连接池）
 
     功能：
     1. 使用预处理节点生成的tokens
@@ -37,10 +37,8 @@ def bm25_search_node(state: State) -> dict:
         }
 
     try:
-        # 连接数据库
-        conn = get_connection()
-
-        try:
+        # 使用连接池
+        with get_db_cursor() as cursor:
             # 构建FTS5查询语句
             # 使用OR连接多个词，实现宽松匹配
             query_str = " OR ".join(tokens)
@@ -60,7 +58,7 @@ def bm25_search_node(state: State) -> dict:
             """
 
             # 执行查询
-            cursor = conn.execute(query_sql, (query_str, config.search.bm25_top_k))
+            cursor.execute(query_sql, (query_str, config.search.bm25_top_k))
             rows = cursor.fetchall()
 
             # 转换为SearchResult列表
@@ -73,10 +71,8 @@ def bm25_search_node(state: State) -> dict:
                 "bm25_results": bm25_results,
             }
 
-        finally:
-            conn.close()
-
     except Exception as e:
         return {
             "error": f"BM25检索失败: {str(e)}",
         }
+

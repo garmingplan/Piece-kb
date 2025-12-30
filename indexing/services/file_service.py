@@ -12,7 +12,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from ..database import get_connection
+from ..database import get_db_cursor
 from ..settings import get_settings
 
 
@@ -157,19 +157,15 @@ async def save_file(filename: str, content: bytes) -> Dict[str, Any]:
 
 def check_file_hash_exists(file_hash: str) -> Optional[int]:
     """
-    检查文件哈希是否已存在
+    检查文件哈希是否已存在（使用连接池）
 
     Returns:
         存在则返回 file_id，否则返回 None
     """
-    conn = get_connection()
-    try:
-        result = conn.execute(
-            "SELECT id FROM files WHERE file_hash = ?", (file_hash,)
-        ).fetchone()
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT id FROM files WHERE file_hash = ?", (file_hash,))
+        result = cursor.fetchone()
         return result["id"] if result else None
-    finally:
-        conn.close()
 
 
 def insert_file_record(
@@ -201,10 +197,9 @@ def insert_file_record(
 
     logger.info(f"[insert_file_record] 准备写入: filename={filename}, original_file_type={original_file_type}, original_file_path={original_file_path}")
 
-    conn = get_connection()
-    try:
+    with get_db_cursor() as cursor:
         now = datetime.now().isoformat()
-        cursor = conn.execute(
+        cursor.execute(
             """
             INSERT INTO files (
                 file_hash, filename, file_path, file_size,
@@ -217,45 +212,34 @@ def insert_file_record(
              original_file_type, original_file_path,
              status, now, now),
         )
-        conn.commit()
         file_id = cursor.lastrowid
 
         logger.info(f"[insert_file_record] 写入成功: file_id={file_id}")
 
         return file_id
-    finally:
-        conn.close()
 
 
 def update_file_status(file_id: int, status: str) -> None:
-    """更新文件状态"""
-    conn = get_connection()
-    try:
+    """更新文件状态（使用连接池）"""
+    with get_db_cursor() as cursor:
         now = datetime.now().isoformat()
-        conn.execute(
+        cursor.execute(
             "UPDATE files SET status = ?, updated_at = ? WHERE id = ?",
             (status, now, file_id),
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def get_file_by_id(file_id: int) -> Optional[Dict[str, Any]]:
-    """根据 ID 获取文件信息"""
-    conn = get_connection()
-    try:
-        result = conn.execute(
-            "SELECT * FROM files WHERE id = ?", (file_id,)
-        ).fetchone()
+    """根据 ID 获取文件信息（使用连接池）"""
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT * FROM files WHERE id = ?", (file_id,))
+        result = cursor.fetchone()
         return dict(result) if result else None
-    finally:
-        conn.close()
 
 
 def get_files_list(status: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    获取文件列表
+    获取文件列表（使用连接池优化）
 
     Args:
         status: 可选，按状态筛选 ('pending', 'indexed', 'error')
@@ -263,25 +247,20 @@ def get_files_list(status: Optional[str] = None) -> List[Dict[str, Any]]:
     Returns:
         文件列表
     """
-    conn = get_connection()
-    try:
+    with get_db_cursor() as cursor:
         if status:
-            rows = conn.execute(
+            cursor.execute(
                 "SELECT * FROM files WHERE status = ? ORDER BY created_at DESC",
                 (status,)
-            ).fetchall()
+            )
         else:
-            rows = conn.execute(
-                "SELECT * FROM files ORDER BY created_at DESC"
-            ).fetchall()
-        return [dict(row) for row in rows]
-    finally:
-        conn.close()
+            cursor.execute("SELECT * FROM files ORDER BY created_at DESC")
+        return [dict(row) for row in cursor.fetchall()]
 
 
 def get_chunks_by_file_id(file_id: int) -> Optional[List[Dict[str, Any]]]:
     """
-    获取文件的所有切片
+    获取文件的所有切片（使用连接池优化）
 
     Args:
         file_id: 文件 ID
@@ -289,28 +268,22 @@ def get_chunks_by_file_id(file_id: int) -> Optional[List[Dict[str, Any]]]:
     Returns:
         切片列表，如果文件不存在返回 None
     """
-    conn = get_connection()
-    try:
+    with get_db_cursor() as cursor:
         # 先检查文件是否存在
-        file_exists = conn.execute(
-            "SELECT id FROM files WHERE id = ?", (file_id,)
-        ).fetchone()
-
-        if not file_exists:
+        cursor.execute("SELECT id FROM files WHERE id = ?", (file_id,))
+        if not cursor.fetchone():
             return None
 
-        rows = conn.execute(
+        cursor.execute(
             "SELECT id, doc_title, chunk_text FROM chunks WHERE file_id = ? ORDER BY id",
             (file_id,)
-        ).fetchall()
-        return [dict(row) for row in rows]
-    finally:
-        conn.close()
+        )
+        return [dict(row) for row in cursor.fetchall()]
 
 
 def delete_file(file_id: int) -> bool:
     """
-    删除文件（数据库记录 + 物理文件）
+    删除文件（数据库记录 + 物理文件，使用连接池优化）
 
     同时删除：
     1. 工作文件（working/）
@@ -320,12 +293,12 @@ def delete_file(file_id: int) -> bool:
     Returns:
         是否删除成功
     """
-    conn = get_connection()
-    try:
+    with get_db_cursor() as cursor:
         # 获取文件路径信息
-        result = conn.execute(
+        cursor.execute(
             "SELECT file_path, original_file_path FROM files WHERE id = ?", (file_id,)
-        ).fetchone()
+        )
+        result = cursor.fetchone()
 
         if not result:
             return False
@@ -334,7 +307,7 @@ def delete_file(file_id: int) -> bool:
         original_file_path = Path(result["original_file_path"]) if result["original_file_path"] else None
 
         # 删除 vec_chunks 中的相关记录（需要手动删除，因为没有外键关联）
-        conn.execute(
+        cursor.execute(
             """
             DELETE FROM vec_chunks WHERE chunk_id IN (
                 SELECT id FROM chunks WHERE file_id = ?
@@ -344,20 +317,17 @@ def delete_file(file_id: int) -> bool:
         )
 
         # 删除数据库记录（chunks 会级联删除）
-        conn.execute("DELETE FROM files WHERE id = ?", (file_id,))
-        conn.commit()
+        cursor.execute("DELETE FROM files WHERE id = ?", (file_id,))
 
-        # 删除工作文件
-        if working_file_path.exists():
-            working_file_path.unlink()
+    # 删除工作文件
+    if working_file_path.exists():
+        working_file_path.unlink()
 
-        # 删除原始文件
-        if original_file_path and original_file_path.exists():
-            original_file_path.unlink()
+    # 删除原始文件
+    if original_file_path and original_file_path.exists():
+        original_file_path.unlink()
 
-        return True
-    finally:
-        conn.close()
+    return True
 
 
 def create_empty_file(filename: str) -> Dict[str, Any]:
@@ -441,13 +411,11 @@ def scan_untracked_files() -> List[Dict[str, Any]]:
     # 确保 working 目录存在
     working_dir.mkdir(parents=True, exist_ok=True)
 
-    # 获取数据库中所有已跟踪的原始文件路径
-    conn = get_connection()
-    try:
-        rows = conn.execute("SELECT original_file_path FROM files WHERE original_file_path IS NOT NULL").fetchall()
+    # 获取数据库中所有已跟踪的原始文件路径（使用连接池）
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT original_file_path FROM files WHERE original_file_path IS NOT NULL")
+        rows = cursor.fetchall()
         tracked_originals = {row["original_file_path"] for row in rows}
-    finally:
-        conn.close()
 
     # 扫描 originals 目录
     untracked = []
@@ -492,21 +460,20 @@ def get_storage_stats() -> Dict[str, Any]:
             "total_size": 总存储大小（字节）
         }
     """
-    conn = get_connection()
-    try:
+    with get_db_cursor() as cursor:
         # 文件统计
-        file_stats = conn.execute("""
+        cursor.execute("""
             SELECT
                 COUNT(*) as total_files,
                 SUM(CASE WHEN status = 'indexed' THEN 1 ELSE 0 END) as indexed_files,
                 COALESCE(SUM(file_size), 0) as total_size
             FROM files
-        """).fetchone()
+        """)
+        file_stats = cursor.fetchone()
 
         # 切片统计
-        chunk_count = conn.execute(
-            "SELECT COUNT(*) as total_chunks FROM chunks"
-        ).fetchone()
+        cursor.execute("SELECT COUNT(*) as total_chunks FROM chunks")
+        chunk_count = cursor.fetchone()
 
         return {
             "total_files": file_stats["total_files"] or 0,
@@ -514,5 +481,3 @@ def get_storage_stats() -> Dict[str, Any]:
             "total_chunks": chunk_count["total_chunks"] or 0,
             "total_size": file_stats["total_size"] or 0,
         }
-    finally:
-        conn.close()

@@ -34,7 +34,7 @@ setup_logging(level="INFO")
 # 使用绝对导入（解决 Windows multiprocessing spawn 问题）
 from nicegui import app, ui
 
-from indexing.database import init_database
+from indexing.database import init_database, init_connection_pool, close_connection_pool
 from indexing.services.processor import processor
 from indexing.settings import get_settings
 from app.api import register_routes, register_chunk_routes
@@ -69,7 +69,7 @@ def start_mcp_server():
         settings = get_settings()
         mcp_port = settings.mcp.port
 
-        logger.info(f"[MCP] Starting Piece Retrieval MCP service - http://{MCP_HOST}:{mcp_port}/mcp")
+        logger.info(f"[MCP Retrieval] Starting Piece Retrieval MCP service - http://{MCP_HOST}:{mcp_port}/mcp")
         mcp.run(
             transport="streamable-http",
             host=MCP_HOST,
@@ -104,6 +104,32 @@ def setup():
     # 生命周期钩子
     app.on_startup(lambda: asyncio.create_task(processor.start()))
     app.on_shutdown(processor.stop)
+    app.on_shutdown(close_connection_pool)  # 应用关闭时清理连接池
+
+    # 在 UI 启动完成后延迟启动 MCP 服务
+    async def delayed_start_mcp_services():
+        """延迟启动 MCP 服务，确保 UI 先完全加载"""
+        await asyncio.sleep(3.0)  # UI 完全启动后延迟 3 秒
+
+        # 在后台线程启动 MCP 服务
+        if _is_main_process:
+            retrieval_mcp_thread = threading.Thread(
+                target=start_mcp_server,
+                daemon=True,
+                name="RetrievalMCP"
+            )
+            retrieval_mcp_thread.start()
+
+            index_mcp_thread = threading.Thread(
+                target=start_index_mcp_server,
+                daemon=True,
+                name="IndexMCP"
+            )
+            index_mcp_thread.start()
+
+            logger.info("[App] MCP 服务已在 UI 启动后启动")
+
+    app.on_startup(lambda: asyncio.create_task(delayed_start_mcp_services()))
 
     # 注册 API 路由
     register_routes(app)
@@ -116,18 +142,15 @@ def setup():
 
 def main():
     """启动应用"""
-    # 只在主进程中初始化数据库、MCP服务
+    # 只在主进程中初始化数据库和连接池
     if _is_main_process:
-        # 初始化数据库
+        # 1. 初始化数据库
         init_database()
 
-        # 在后台线程启动检索 MCP 服务
-        retrieval_mcp_thread = threading.Thread(target=start_mcp_server, daemon=True, name="RetrievalMCP")
-        retrieval_mcp_thread.start()
-
-        # 在后台线程启动索引 MCP 服务
-        index_mcp_thread = threading.Thread(target=start_index_mcp_server, daemon=True, name="IndexMCP")
-        index_mcp_thread.start()
+        # 2. 初始化数据库连接池（性能优化：复用连接）
+        init_connection_pool()
+        logger.info("[App] 数据库连接池已初始化")
+        logger.info("[App] MCP 服务将在 UI 完全启动后自动启动")
 
     # 初始化服务（主进程和子进程都需要）
     setup()

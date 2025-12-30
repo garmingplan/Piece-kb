@@ -13,7 +13,7 @@ from typing import List, Dict, Optional
 
 from langchain_openai import OpenAIEmbeddings
 
-from ..database import get_connection
+from ..database import get_db_cursor
 from ..settings import get_embedding_config
 from ..utils import serialize_float32
 from . import task_service, file_service, chunk_service
@@ -87,18 +87,16 @@ def insert_chunks_batch(
         batch_chunks = chunks[batch_start:batch_end]
         batch_embeddings = embeddings_list[batch_start:batch_end]
 
-        # 单批次写入
-        conn = get_connection()
-        try:
+        # 单批次写入（使用连接池）
+        with get_db_cursor() as cursor:
             # 准备批量插入数据
-            chunks_data = []
             vec_chunks_data = []
 
             for chunk, embedding in zip(batch_chunks, batch_embeddings):
                 embedding_blob = serialize_float32(embedding)
 
                 # 插入 chunks 表
-                cursor = conn.execute(
+                cursor.execute(
                     """
                     INSERT INTO chunks (file_id, doc_title, chunk_text, embedding)
                     VALUES (?, ?, ?, ?)
@@ -113,7 +111,7 @@ def insert_chunks_batch(
 
             # 批量插入向量表（性能优化）
             if vec_chunks_data:
-                conn.executemany(
+                cursor.executemany(
                     """
                     INSERT INTO vec_chunks (chunk_id, embedding)
                     VALUES (?, ?)
@@ -121,20 +119,12 @@ def insert_chunks_batch(
                     vec_chunks_data
                 )
 
-            conn.commit()
-            logger.info(f"[批量写入] 批次 {batch_start//batch_size + 1}: 已写入 {batch_end}/{total_chunks} 个切片")
+        logger.info(f"[批量写入] 批次 {batch_start//batch_size + 1}: 已写入 {batch_end}/{total_chunks} 个切片")
 
-            # 更新进度（85%-100%）
-            if progress_callback:
-                progress = 85 + int(15 * batch_end / total_chunks)
-                progress_callback(progress)
-
-        except Exception as e:
-            logger.error(f"[批量写入] 批次 {batch_start//batch_size + 1} 写入失败: {e}")
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+        # 更新进度（85%-100%）
+        if progress_callback:
+            progress = 85 + int(15 * batch_end / total_chunks)
+            progress_callback(progress)
 
     logger.info(f"[批量写入] 完成: 共写入 {total_chunks} 个切片")
 
