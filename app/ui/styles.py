@@ -136,12 +136,23 @@ THEME_CSS = '''
         word-break: break-word !important;
         max-width: 100% !important;
         width: 100% !important;
+        /* 允许文本选择和复制 */
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        -moz-user-select: text !important;
+        -ms-user-select: text !important;
+        cursor: text !important;
     }
     .chunk-content * {
         max-width: 100% !important;
         word-wrap: break-word !important;
         overflow-wrap: break-word !important;
         word-break: break-word !important;
+        /* 允许所有子元素的文本选择 */
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        -moz-user-select: text !important;
+        -ms-user-select: text !important;
     }
     .chunk-content p {
         white-space: pre-wrap !important;
@@ -149,23 +160,40 @@ THEME_CSS = '''
     }
     .chunk-content a {
         word-break: break-all !important;
+        cursor: pointer !important;  /* 链接保持指针样式 */
     }
+    .chunk-content button {
+        cursor: pointer !important;  /* 按钮保持指针样式 */
+        user-select: none !important;  /* 按钮文本不可选 */
+    }
+    /* 表格样式 */
     .chunk-content table {
-        display: block !important;
-        overflow-x: auto !important;
-        overflow: auto !important;
         width: 100% !important;
         max-width: 100% !important;
-        table-layout: fixed !important;
+        border-collapse: collapse !important;
+        margin: 0.5rem 0 !important;
+        font-size: 0.875rem !important;
+        display: table !important;
     }
-    .chunk-content td, .chunk-content th {
+    .chunk-content th {
+        background-color: var(--bg-hover) !important;
+        color: var(--text-primary) !important;
+        font-weight: 600 !important;
+        padding: 0.5rem !important;
+        border: 1px solid var(--border-color) !important;
+        text-align: left !important;
+    }
+    .chunk-content td {
+        color: var(--text-secondary) !important;
+        padding: 0.5rem !important;
+        border: 1px solid var(--border-color) !important;
+        text-align: left !important;
         word-wrap: break-word !important;
         overflow-wrap: break-word !important;
-        min-width: 50px !important;
     }
-    .chunk-content tbody, .chunk-content thead, .chunk-content tr {
-        display: block !important;
-        width: 100% !important;
+    /* 表格容器支持横向滚动（超宽时） */
+    .chunk-content > div:has(> table) {
+        overflow-x: auto !important;
         max-width: 100% !important;
     }
 

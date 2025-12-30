@@ -35,6 +35,7 @@ setup_logging(level="INFO")
 from nicegui import app, ui
 
 from indexing.database import init_database, init_connection_pool, close_connection_pool
+from retrieval.db import close_retrieval_connection_pool
 from indexing.services.processor import processor
 from indexing.settings import get_settings
 from app.api import register_routes, register_chunk_routes
@@ -103,8 +104,31 @@ def setup():
     """初始化服务（注册路由、页面、生命周期钩子）"""
     # 生命周期钩子
     app.on_startup(lambda: asyncio.create_task(processor.start()))
-    app.on_shutdown(processor.stop)
-    app.on_shutdown(close_connection_pool)  # 应用关闭时清理连接池
+
+    # 关闭时清理资源（按依赖顺序：先停止任务，再关闭连接池）
+    async def shutdown_processor():
+        logger.info("[Shutdown] 正在停止任务处理器...")
+        await processor.stop()
+        logger.info("[Shutdown] 任务处理器已停止")
+
+    def shutdown_indexing_pool():
+        logger.info("[Shutdown] 正在关闭 indexing 数据库连接池...")
+        close_connection_pool()
+        logger.info("[Shutdown] indexing 连接池已关闭")
+
+    def shutdown_retrieval_pool():
+        logger.info("[Shutdown] 正在关闭 retrieval 数据库连接池...")
+        close_retrieval_connection_pool()
+        logger.info("[Shutdown] retrieval 连接池已关闭")
+
+    app.on_shutdown(shutdown_processor)
+    app.on_shutdown(shutdown_indexing_pool)
+    app.on_shutdown(shutdown_retrieval_pool)
+
+    # 关闭完成日志
+    def log_shutdown_complete():
+        logger.info("[Shutdown] 应用已安全关闭")
+    app.on_shutdown(log_shutdown_complete)
 
     # 在 UI 启动完成后延迟启动 MCP 服务
     async def delayed_start_mcp_services():
