@@ -20,6 +20,11 @@ from ..utils import serialize_float32
 from . import task_service
 from . import file_service
 from .rate_limiter import get_rate_limiter
+from ..repositories import ChunkRepository, FileRepository
+
+# 初始化 Repository
+_chunk_repo = ChunkRepository()
+_file_repo = FileRepository()
 
 
 # ========== 工作文件同步 ==========
@@ -88,25 +93,13 @@ def rebuild_working_file(file_id: int) -> None:
 
 
 def get_chunk_by_id(chunk_id: int) -> Optional[Dict[str, Any]]:
-    """根据 ID 获取 chunk 信息（使用连接池）"""
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            "SELECT id, file_id, doc_title, chunk_text FROM chunks WHERE id = ?",
-            (chunk_id,)
-        )
-        result = cursor.fetchone()
-        return dict(result) if result else None
+    """根据 ID 获取 chunk 信息"""
+    return _chunk_repo.find_by_id(chunk_id)
 
 
 def get_chunks_count_by_file_id(file_id: int) -> int:
-    """获取文件的 chunk 数量（使用连接池）"""
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            "SELECT COUNT(*) as count FROM chunks WHERE file_id = ?",
-            (file_id,)
-        )
-        result = cursor.fetchone()
-        return result["count"]
+    """获取文件的 chunk 数量"""
+    return _chunk_repo.count_by_file_id(file_id)
 
 
 # ========== 删除操作 ==========
@@ -114,7 +107,7 @@ def get_chunks_count_by_file_id(file_id: int) -> int:
 
 def delete_chunk(chunk_id: int) -> Dict[str, Any]:
     """
-    删除单个 chunk（使用连接池）
+    删除单个 chunk
 
     流程:
     1. 获取 chunk 信息（file_id）
@@ -125,33 +118,34 @@ def delete_chunk(chunk_id: int) -> Dict[str, Any]:
     Returns:
         {"success": bool, "file_id": int, "file_deleted": bool}
     """
-    # 1. 获取 chunk 信息和文件切片数量
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT file_id FROM chunks WHERE id = ?", (chunk_id,))
-        chunk = cursor.fetchone()
+    # 1. 获取 chunk 信息
+    chunk = _chunk_repo.find_by_id(chunk_id)
 
-        if not chunk:
-            return {"success": False, "error": "Chunk 不存在"}
+    if not chunk:
+        return {"success": False, "error": "Chunk 不存在"}
 
-        file_id = chunk["file_id"]
+    file_id = chunk["file_id"]
 
-        cursor.execute("SELECT COUNT(*) as count FROM chunks WHERE file_id = ?", (file_id,))
-        remaining = cursor.fetchone()["count"]
+    # 2. 获取文件切片数量
+    remaining = _chunk_repo.count_by_file_id(file_id)
 
-    # 2. 如果是最后一个切片，删除整个文件
+    # 3. 如果是最后一个切片，删除整个文件
     if remaining == 1:
         success = file_service.delete_file(file_id)
         return {"success": success, "file_id": file_id, "file_deleted": True}
 
-    # 3. 删除 vec_chunks 和 chunks 记录
-    with get_db_cursor() as cursor:
-        cursor.execute("DELETE FROM vec_chunks WHERE chunk_id = ?", (chunk_id,))
-        cursor.execute("DELETE FROM chunks WHERE id = ?", (chunk_id,))
+    # 4. 删除切片并重建文件（确保事务一致性）
+    try:
+        # 删除切片（包括 vec_chunks）
+        _chunk_repo.delete_with_vectors(chunk_id)
 
-    # 4. 重建工作文件
-    rebuild_working_file(file_id)
+        # 重建工作文件
+        rebuild_working_file(file_id)
 
-    return {"success": True, "file_id": file_id, "file_deleted": False}
+        return {"success": True, "file_id": file_id, "file_deleted": False}
+    except Exception as e:
+        logger.error(f"[Chunk Service] 删除切片失败: {e}")
+        return {"success": False, "error": str(e), "file_id": file_id}
 
 
 # ========== 修改操作 ==========
@@ -159,32 +153,31 @@ def delete_chunk(chunk_id: int) -> Dict[str, Any]:
 
 def update_chunk_title(chunk_id: int, doc_title: str) -> Optional[Dict[str, Any]]:
     """
-    修改 chunk 标题（使用连接池，同步操作，不需要重新生成 embedding）
+    修改 chunk 标题（同步操作，不需要重新生成 embedding）
 
     Returns:
         更新后的 chunk 信息，失败返回 None
     """
     # 检查 chunk 是否存在并获取 file_id
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id, file_id FROM chunks WHERE id = ?", (chunk_id,))
-        existing = cursor.fetchone()
+    chunk = _chunk_repo.find_by_id(chunk_id)
 
-        if not existing:
-            return None
+    if not chunk:
+        return None
 
-        file_id = existing["file_id"]
+    file_id = chunk["file_id"]
 
+    try:
         # 更新标题（FTS5 触发器自动同步）
-        cursor.execute(
-            "UPDATE chunks SET doc_title = ? WHERE id = ?",
-            (doc_title, chunk_id)
-        )
+        _chunk_repo.update_title(chunk_id, doc_title)
 
-    # 重建工作文件
-    rebuild_working_file(file_id)
+        # 重建工作文件
+        rebuild_working_file(file_id)
 
-    # 返回更新后的 chunk
-    return get_chunk_by_id(chunk_id)
+        # 返回更新后的 chunk
+        return get_chunk_by_id(chunk_id)
+    except Exception as e:
+        logger.error(f"[Chunk Service] 更新切片标题失败: {e}")
+        return None
 
 
 def create_chunk_update_task(chunk_id: int, chunk_text: str) -> int:
@@ -257,28 +250,16 @@ async def process_chunk_update_task(task_id: int) -> None:
 
         task_service.update_task_status(task_id, "processing", progress=70)
 
-        # 更新数据库（使用连接池）
-        with get_db_cursor() as cursor:
-            # 获取 file_id
-            cursor.execute("SELECT file_id FROM chunks WHERE id = ?", (chunk_id,))
-            file_id_row = cursor.fetchone()
+        # 获取 file_id（用于重建工作文件）
+        chunk = _chunk_repo.find_by_id(chunk_id)
 
-            if not file_id_row:
-                raise Exception("Chunk 不存在")
+        if not chunk:
+            raise Exception("Chunk 不存在")
 
-            file_id = file_id_row["file_id"]
+        file_id = chunk["file_id"]
 
-            # 更新 chunks 表（FTS5 触发器自动同步）
-            cursor.execute(
-                "UPDATE chunks SET chunk_text = ?, embedding = ? WHERE id = ?",
-                (chunk_text, embedding_blob, chunk_id)
-            )
-
-            # 更新 vec_chunks 表
-            cursor.execute(
-                "UPDATE vec_chunks SET embedding = ? WHERE chunk_id = ?",
-                (embedding_blob, chunk_id)
-            )
+        # 更新数据库（chunks 和 vec_chunks）
+        _chunk_repo.update_content(chunk_id, chunk_text, embedding_blob)
 
         # 重建工作文件
         rebuild_working_file(file_id)
@@ -369,30 +350,13 @@ async def process_chunk_add_task(task_id: int) -> None:
 
         task_service.update_task_status(task_id, "processing", progress=70)
 
-        # 插入数据库（使用连接池）
-        with get_db_cursor() as cursor:
-            # 插入 chunks 表（FTS5 触发器自动同步）
-            cursor.execute(
-                """
-                INSERT INTO chunks (file_id, doc_title, chunk_text, embedding)
-                VALUES (?, ?, ?, ?)
-                """,
-                (file_id, doc_title, chunk_text, embedding_blob)
-            )
-            chunk_id = cursor.lastrowid
+        # 插入切片（包括 vec_chunks）
+        chunk_id = _chunk_repo.insert(file_id, doc_title, chunk_text, embedding_blob)
 
-            # 插入 vec_chunks 表
-            cursor.execute(
-                "INSERT INTO vec_chunks (chunk_id, embedding) VALUES (?, ?)",
-                (chunk_id, embedding_blob)
-            )
-
-            # 更新文件状态（如果是 empty → indexed）
-            now = datetime.now().isoformat()
-            cursor.execute(
-                "UPDATE files SET status = 'indexed', updated_at = ? WHERE id = ? AND status = 'empty'",
-                (now, file_id)
-            )
+        # 更新文件状态（如果是 empty → indexed）
+        file_info = _file_repo.find_by_id(file_id)
+        if file_info and file_info["status"] == "empty":
+            _file_repo.update_status(file_id, "indexed")
 
         # 重建工作文件
         rebuild_working_file(file_id)

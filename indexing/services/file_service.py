@@ -14,6 +14,11 @@ from typing import Optional, List, Dict, Any
 
 from ..database import get_db_cursor
 from ..settings import get_settings
+from ..repositories import FileRepository, ChunkRepository
+
+# 初始化 Repository
+_file_repo = FileRepository()
+_chunk_repo = ChunkRepository()
 
 
 def get_files_dir() -> Path:
@@ -157,15 +162,13 @@ async def save_file(filename: str, content: bytes) -> Dict[str, Any]:
 
 def check_file_hash_exists(file_hash: str) -> Optional[int]:
     """
-    检查文件哈希是否已存在（使用连接池）
+    检查文件哈希是否已存在
 
     Returns:
         存在则返回 file_id，否则返回 None
     """
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id FROM files WHERE file_hash = ?", (file_hash,))
-        result = cursor.fetchone()
-        return result["id"] if result else None
+    file = _file_repo.find_by_hash(file_hash)
+    return file["id"] if file else None
 
 
 def insert_file_record(
@@ -197,49 +200,34 @@ def insert_file_record(
 
     logger.info(f"[insert_file_record] 准备写入: filename={filename}, original_file_type={original_file_type}, original_file_path={original_file_path}")
 
-    with get_db_cursor() as cursor:
-        now = datetime.now().isoformat()
-        cursor.execute(
-            """
-            INSERT INTO files (
-                file_hash, filename, file_path, file_size,
-                original_file_type, original_file_path,
-                status, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (file_hash, filename, file_path, file_size,
-             original_file_type, original_file_path,
-             status, now, now),
-        )
-        file_id = cursor.lastrowid
+    file_id = _file_repo.insert(
+        file_hash=file_hash,
+        filename=filename,
+        file_path=file_path,
+        file_size=file_size,
+        status=status,
+        original_file_type=original_file_type,
+        original_file_path=original_file_path
+    )
 
-        logger.info(f"[insert_file_record] 写入成功: file_id={file_id}")
+    logger.info(f"[insert_file_record] 写入成功: file_id={file_id}")
 
-        return file_id
+    return file_id
 
 
 def update_file_status(file_id: int, status: str) -> None:
-    """更新文件状态（使用连接池）"""
-    with get_db_cursor() as cursor:
-        now = datetime.now().isoformat()
-        cursor.execute(
-            "UPDATE files SET status = ?, updated_at = ? WHERE id = ?",
-            (status, now, file_id),
-        )
+    """更新文件状态"""
+    _file_repo.update_status(file_id, status)
 
 
 def get_file_by_id(file_id: int) -> Optional[Dict[str, Any]]:
-    """根据 ID 获取文件信息（使用连接池）"""
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT * FROM files WHERE id = ?", (file_id,))
-        result = cursor.fetchone()
-        return dict(result) if result else None
+    """根据 ID 获取文件信息"""
+    return _file_repo.find_by_id(file_id)
 
 
 def get_files_list(status: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    获取文件列表（使用连接池优化）
+    获取文件列表
 
     Args:
         status: 可选，按状态筛选 ('pending', 'indexed', 'error')
@@ -247,20 +235,15 @@ def get_files_list(status: Optional[str] = None) -> List[Dict[str, Any]]:
     Returns:
         文件列表
     """
-    with get_db_cursor() as cursor:
-        if status:
-            cursor.execute(
-                "SELECT * FROM files WHERE status = ? ORDER BY created_at DESC",
-                (status,)
-            )
-        else:
-            cursor.execute("SELECT * FROM files ORDER BY created_at DESC")
-        return [dict(row) for row in cursor.fetchall()]
+    if status:
+        return _file_repo.find_by_status(status)
+    else:
+        return _file_repo.find_all_ordered(order_by="created_at", desc=True)
 
 
 def get_chunks_by_file_id(file_id: int) -> Optional[List[Dict[str, Any]]]:
     """
-    获取文件的所有切片（使用连接池优化）
+    获取文件的所有切片
 
     Args:
         file_id: 文件 ID
@@ -268,22 +251,16 @@ def get_chunks_by_file_id(file_id: int) -> Optional[List[Dict[str, Any]]]:
     Returns:
         切片列表，如果文件不存在返回 None
     """
-    with get_db_cursor() as cursor:
-        # 先检查文件是否存在
-        cursor.execute("SELECT id FROM files WHERE id = ?", (file_id,))
-        if not cursor.fetchone():
-            return None
+    # 先检查文件是否存在
+    if not _file_repo.exists(file_id):
+        return None
 
-        cursor.execute(
-            "SELECT id, doc_title, chunk_text FROM chunks WHERE file_id = ? ORDER BY id",
-            (file_id,)
-        )
-        return [dict(row) for row in cursor.fetchall()]
+    return _chunk_repo.find_by_file_id(file_id)
 
 
 def delete_file(file_id: int) -> bool:
     """
-    删除文件（数据库记录 + 物理文件，使用连接池优化）
+    删除文件（数据库记录 + 物理文件）
 
     同时删除：
     1. 工作文件（working/）
@@ -293,31 +270,17 @@ def delete_file(file_id: int) -> bool:
     Returns:
         是否删除成功
     """
-    with get_db_cursor() as cursor:
-        # 获取文件路径信息
-        cursor.execute(
-            "SELECT file_path, original_file_path FROM files WHERE id = ?", (file_id,)
-        )
-        result = cursor.fetchone()
+    # 获取文件路径信息
+    file_info = _file_repo.find_by_id(file_id)
 
-        if not result:
-            return False
+    if not file_info:
+        return False
 
-        working_file_path = Path(result["file_path"])
-        original_file_path = Path(result["original_file_path"]) if result["original_file_path"] else None
+    working_file_path = Path(file_info["file_path"])
+    original_file_path = Path(file_info["original_file_path"]) if file_info["original_file_path"] else None
 
-        # 删除 vec_chunks 中的相关记录（需要手动删除，因为没有外键关联）
-        cursor.execute(
-            """
-            DELETE FROM vec_chunks WHERE chunk_id IN (
-                SELECT id FROM chunks WHERE file_id = ?
-            )
-            """,
-            (file_id,)
-        )
-
-        # 删除数据库记录（chunks 会级联删除）
-        cursor.execute("DELETE FROM files WHERE id = ?", (file_id,))
+    # 删除数据库记录（包括相关的 chunks 和 vec_chunks）
+    _file_repo.delete_with_chunks(file_id)
 
     # 删除工作文件
     if working_file_path.exists():
@@ -411,11 +374,8 @@ def scan_untracked_files() -> List[Dict[str, Any]]:
     # 确保 working 目录存在
     working_dir.mkdir(parents=True, exist_ok=True)
 
-    # 获取数据库中所有已跟踪的原始文件路径（使用连接池）
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT original_file_path FROM files WHERE original_file_path IS NOT NULL")
-        rows = cursor.fetchall()
-        tracked_originals = {row["original_file_path"] for row in rows}
+    # 获取数据库中所有已跟踪的原始文件路径
+    tracked_originals = _file_repo.find_tracked_original_paths()
 
     # 扫描 originals 目录
     untracked = []
@@ -460,24 +420,12 @@ def get_storage_stats() -> Dict[str, Any]:
             "total_size": 总存储大小（字节）
         }
     """
-    with get_db_cursor() as cursor:
-        # 文件统计
-        cursor.execute("""
-            SELECT
-                COUNT(*) as total_files,
-                SUM(CASE WHEN status = 'indexed' THEN 1 ELSE 0 END) as indexed_files,
-                COALESCE(SUM(file_size), 0) as total_size
-            FROM files
-        """)
-        file_stats = cursor.fetchone()
+    file_stats = _file_repo.get_storage_stats()
+    chunk_count = _chunk_repo.get_total_count()
 
-        # 切片统计
-        cursor.execute("SELECT COUNT(*) as total_chunks FROM chunks")
-        chunk_count = cursor.fetchone()
-
-        return {
-            "total_files": file_stats["total_files"] or 0,
-            "indexed_files": file_stats["indexed_files"] or 0,
-            "total_chunks": chunk_count["total_chunks"] or 0,
-            "total_size": file_stats["total_size"] or 0,
-        }
+    return {
+        "total_files": file_stats["total_files"],
+        "indexed_files": file_stats["indexed_files"],
+        "total_chunks": chunk_count,
+        "total_size": file_stats["total_size"],
+    }

@@ -11,11 +11,15 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 from ..database import get_db_cursor
+from ..repositories import TaskRepository
+
+# 初始化 Repository
+_task_repo = TaskRepository()
 
 
 def create_task(original_filename: str) -> int:
     """
-    创建新任务（使用连接池）
+    创建新任务
 
     Args:
         original_filename: 原始文件名
@@ -23,24 +27,12 @@ def create_task(original_filename: str) -> int:
     Returns:
         新创建的 task_id
     """
-    with get_db_cursor() as cursor:
-        now = datetime.now().isoformat()
-        cursor.execute(
-            """
-            INSERT INTO tasks (original_filename, status, progress, created_at, updated_at)
-            VALUES (?, 'pending', 0, ?, ?)
-            """,
-            (original_filename, now, now),
-        )
-        return cursor.lastrowid
+    return _task_repo.create(original_filename)
 
 
 def get_task(task_id: int) -> Optional[Dict[str, Any]]:
-    """根据 ID 获取任务信息（使用连接池）"""
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
-        result = cursor.fetchone()
-        return dict(result) if result else None
+    """根据 ID 获取任务信息"""
+    return _task_repo.find_by_id(task_id)
 
 
 def update_task_status(
@@ -51,7 +43,7 @@ def update_task_status(
     file_id: Optional[int] = None
 ) -> None:
     """
-    更新任务状态（使用连接池）
+    更新任务状态
 
     Args:
         task_id: 任务 ID
@@ -60,61 +52,29 @@ def update_task_status(
         error_message: 错误信息（仅 failed 状态）
         file_id: 关联的文件 ID
     """
-    with get_db_cursor() as cursor:
-        now = datetime.now().isoformat()
-
-        # 构建动态 SQL
-        updates = ["status = ?", "updated_at = ?"]
-        params = [status, now]
-
-        if progress is not None:
-            updates.append("progress = ?")
-            params.append(progress)
-
-        if error_message is not None:
-            updates.append("error_message = ?")
-            params.append(error_message)
-
-        if file_id is not None:
-            updates.append("file_id = ?")
-            params.append(file_id)
-
-        params.append(task_id)
-
-        sql = f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?"
-        cursor.execute(sql, params)
+    _task_repo.update_status(task_id, status, progress, error_message, file_id)
 
 
 def update_task_progress(task_id: int, progress: int) -> None:
     """更新任务进度"""
-    update_task_status(task_id, "processing", progress=progress)
+    _task_repo.update_progress(task_id, progress)
 
 
 def get_pending_tasks() -> List[Dict[str, Any]]:
-    """获取所有待处理的任务（使用连接池）"""
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT * FROM tasks WHERE status = 'pending' ORDER BY created_at ASC")
-        return [dict(row) for row in cursor.fetchall()]
+    """获取所有待处理的任务"""
+    return _task_repo.find_pending()
 
 
 def get_active_tasks() -> List[Dict[str, Any]]:
     """
-    获取所有活跃的任务（pending 或 processing）（使用连接池）
+    获取所有活跃的任务（pending 或 processing）
 
     用于页面加载时恢复任务监控
 
     Returns:
         活跃任务列表
     """
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT * FROM tasks
-            WHERE status IN ('pending', 'processing')
-            ORDER BY created_at ASC
-            """
-        )
-        return [dict(row) for row in cursor.fetchall()]
+    return _task_repo.find_active()
 
 
 def get_tasks_list(
@@ -122,7 +82,7 @@ def get_tasks_list(
     limit: int = 50
 ) -> List[Dict[str, Any]]:
     """
-    获取任务列表（使用连接池）
+    获取任务列表
 
     Args:
         status: 可选，按状态筛选
@@ -131,22 +91,12 @@ def get_tasks_list(
     Returns:
         任务列表
     """
-    with get_db_cursor() as cursor:
-        if status:
-            cursor.execute(
-                "SELECT * FROM tasks WHERE status = ? ORDER BY created_at DESC LIMIT ?",
-                (status, limit)
-            )
-        else:
-            cursor.execute(
-                "SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?",
-                (limit,)
-            )
-        return [dict(row) for row in cursor.fetchall()]
+    if status:
+        return _task_repo.find_by_status(status, limit)
+    else:
+        return _task_repo.find_recent(limit)
 
 
 def delete_task(task_id: int) -> bool:
-    """删除任务记录（使用连接池）"""
-    with get_db_cursor() as cursor:
-        cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-        return cursor.rowcount > 0
+    """删除任务记录"""
+    return _task_repo.delete_by_id(task_id)

@@ -21,6 +21,7 @@ import logging
 import threading
 from pathlib import Path
 from contextlib import contextmanager
+from queue import Queue, Empty
 
 from .settings import get_settings, get_vector_dim
 
@@ -29,6 +30,111 @@ logger = logging.getLogger(__name__)
 # 全局连接池（线程安全）
 _connection_pool = None
 _pool_lock = threading.Lock()
+_pool_size = 5  # 连接池大小
+
+
+class ConnectionPool:
+    """
+    SQLite 连接池实现
+
+    特性:
+    - 支持多个连接并发使用
+    - 自动回收和复用连接
+    - 线程安全
+    """
+
+    def __init__(self, db_path: Path, pool_size: int = 5):
+        """
+        初始化连接池
+
+        Args:
+            db_path: 数据库文件路径
+            pool_size: 连接池大小
+        """
+        self.db_path = db_path
+        self.pool_size = pool_size
+        self._pool = Queue(maxsize=pool_size)
+        self._all_connections = []
+        self._lock = threading.Lock()
+
+        # 预创建连接
+        for _ in range(pool_size):
+            conn = self._create_connection()
+            self._pool.put(conn)
+            self._all_connections.append(conn)
+
+        logger.info(f"[DB Pool] 连接池初始化成功，大小: {pool_size}")
+
+    def _create_connection(self) -> sqlite3.Connection:
+        """创建新的数据库连接"""
+        conn = sqlite3.connect(
+            str(self.db_path),
+            check_same_thread=False,
+            timeout=30.0
+        )
+        conn.row_factory = sqlite3.Row
+
+        # 启用 WAL 模式
+        conn.execute("PRAGMA journal_mode=WAL")
+
+        # 启用外键约束
+        conn.execute("PRAGMA foreign_keys=ON")
+
+        # 性能优化
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA cache_size=-64000")  # 64MB 缓存
+        conn.execute("PRAGMA temp_store=MEMORY")
+
+        # 加载 sqlite-vec 扩展
+        _load_sqlite_vec(conn)
+
+        return conn
+
+    def get_connection(self, timeout: float = 5.0) -> sqlite3.Connection:
+        """
+        从连接池获取连接
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            数据库连接
+
+        Raises:
+            Empty: 连接池为空且超时
+        """
+        try:
+            return self._pool.get(timeout=timeout)
+        except Empty:
+            raise RuntimeError("连接池已耗尽，无法获取连接")
+
+    def return_connection(self, conn: sqlite3.Connection) -> None:
+        """
+        归还连接到连接池
+
+        Args:
+            conn: 数据库连接
+        """
+        self._pool.put(conn)
+
+    def close_all(self) -> None:
+        """关闭所有连接"""
+        with self._lock:
+            for conn in self._all_connections:
+                try:
+                    conn.close()
+                except Exception as e:
+                    logger.error(f"[DB Pool] 关闭连接失败: {e}")
+            self._all_connections.clear()
+
+            # 清空队列
+            while not self._pool.empty():
+                try:
+                    self._pool.get_nowait()
+                except Empty:
+                    break
+
+        logger.info("[DB Pool] 所有连接已关闭")
 
 
 def _get_sqlite_vec_path() -> str:
@@ -75,7 +181,7 @@ def init_connection_pool(db_path: Path = None) -> None:
     """
     初始化数据库连接池（应用启动时调用一次）
 
-    连接池使用单一长连接 + check_same_thread=False，适合读多写少场景
+    使用真正的连接池（多个连接），支持并发访问
 
     Args:
         db_path: 数据库文件路径，默认使用配置路径
@@ -93,27 +199,8 @@ def init_connection_pool(db_path: Path = None) -> None:
         # 确保 data 目录存在
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 创建长连接（check_same_thread=False 允许多线程共享）
-        _connection_pool = sqlite3.connect(
-            str(db_path),
-            check_same_thread=False,
-            timeout=30.0  # 增加超时时间
-        )
-        _connection_pool.row_factory = sqlite3.Row
-
-        # 启用 WAL 模式（支持并发读写）
-        _connection_pool.execute("PRAGMA journal_mode=WAL")
-
-        # 启用外键约束
-        _connection_pool.execute("PRAGMA foreign_keys=ON")
-
-        # 性能优化
-        _connection_pool.execute("PRAGMA synchronous=NORMAL")  # 平衡性能与安全
-        _connection_pool.execute("PRAGMA cache_size=-64000")   # 64MB 缓存
-        _connection_pool.execute("PRAGMA temp_store=MEMORY")   # 临时表使用内存
-
-        # 加载 sqlite-vec 扩展
-        _load_sqlite_vec(_connection_pool)
+        # 创建连接池
+        _connection_pool = ConnectionPool(db_path, pool_size=_pool_size)
 
         logger.info(f"[DB Pool] 连接池初始化成功: {db_path}")
 
@@ -124,7 +211,7 @@ def close_connection_pool() -> None:
 
     with _pool_lock:
         if _connection_pool is not None:
-            _connection_pool.close()
+            _connection_pool.close_all()
             _connection_pool = None
             logger.info("[DB Pool] 连接池已关闭")
 
@@ -141,8 +228,8 @@ def get_db_cursor():
 
     特性:
     - 自动提交/回滚事务
-    - 线程安全（使用锁保护）
-    - 复用连接池连接
+    - 线程安全（使用连接池）
+    - 自动归还连接
 
     Yields:
         sqlite3.Cursor: 数据库游标
@@ -153,16 +240,20 @@ def get_db_cursor():
     if _connection_pool is None:
         init_connection_pool()
 
-    with _pool_lock:
-        cursor = _connection_pool.cursor()
-        try:
-            yield cursor
-            _connection_pool.commit()
-        except Exception:
-            _connection_pool.rollback()
-            raise
-        finally:
-            cursor.close()
+    # 从连接池获取连接
+    conn = _connection_pool.get_connection()
+    cursor = conn.cursor()
+
+    try:
+        yield cursor
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        # 归还连接到连接池
+        _connection_pool.return_connection(conn)
 
 
 def init_database(db_path: Path = None) -> None:
