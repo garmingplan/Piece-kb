@@ -76,6 +76,38 @@ class ChunkRepository(BaseRepository):
             result = cursor.fetchone()
             return result["count"]
 
+    def find_by_file_id_paginated(
+        self,
+        file_id: int,
+        page: int = 1,
+        page_size: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        分页查询文件的切片
+
+        Args:
+            file_id: 文件 ID
+            page: 页码（从1开始）
+            page_size: 每页数量
+
+        Returns:
+            切片列表
+        """
+        offset = (page - 1) * page_size
+
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, file_id, doc_title, chunk_text
+                FROM chunks
+                WHERE file_id = ?
+                ORDER BY id
+                LIMIT ? OFFSET ?
+                """,
+                (file_id, page_size, offset)
+            )
+            return [self._row_to_dict(row) for row in cursor.fetchall()]
+
     def insert(
         self,
         file_id: int,

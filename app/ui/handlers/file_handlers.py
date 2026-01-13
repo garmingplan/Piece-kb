@@ -74,15 +74,44 @@ class FileHandlers:
             )
             self.ui_refs["stats_label"].update()
 
-    def load_chunks(self, file_id: int):
-        """加载选中文件的切片"""
-        self.state["selected_file_id"] = file_id
-        self.state["chunks_data"] = file_service.get_chunks_by_file_id(file_id) or []
-        # 重置分页到第一页
-        self.state["chunk_page"] = 1
+    async def load_chunks(self, file_id: int):
+        """加载选中文件的切片（异步 + 后端分页）"""
+        import asyncio
 
+        # 1. 立即更新选中状态
+        self.state["selected_file_id"] = file_id
+
+        # 2. 清空旧数据，显示加载状态
+        self.state["chunks_data"] = []
+        self.state["chunk_page"] = 1
+        self.state["total_chunks"] = 0
+        self.state["total_chunk_pages"] = 1
+
+        # 3. 立即刷新 UI（显示"加载中"）
         if self.ui_refs.get("file_list_container"):
             self.ui_refs["file_list_container"].refresh()
+        if self.ui_refs.get("chunk_inspector"):
+            self.ui_refs["chunk_inspector"].refresh()
+
+        # 4. 异步加载第一页数据
+        result = await asyncio.to_thread(
+            file_service.get_chunks_paginated,
+            file_id,
+            page=1,
+            page_size=self.state["chunk_page_size"]
+        )
+
+        # 5. 更新状态
+        if result:
+            self.state["chunks_data"] = result["chunks"]
+            self.state["total_chunks"] = result["total"]
+            self.state["total_chunk_pages"] = result["total_pages"]
+        else:
+            self.state["chunks_data"] = []
+            self.state["total_chunks"] = 0
+            self.state["total_chunk_pages"] = 1
+
+        # 6. 刷新 UI（显示数据）
         if self.ui_refs.get("chunk_inspector"):
             self.ui_refs["chunk_inspector"].refresh()
 

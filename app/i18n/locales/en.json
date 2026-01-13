@@ -52,6 +52,7 @@
     "title": "Knowledge Cards",
     "select_file": "Please select a file on the left",
     "empty": "No chunks in this file",
+    "loading": "Loading...",
     "add": "Add Chunk",
     "edit": "Edit Chunk",
     "refresh": "Refresh",
@@ -76,6 +77,7 @@
     "batch_delete_confirm_msg": "Are you sure you want to delete {count} selected chunks?\n\nThis action cannot be undone.",
     "batch_deleted": "{count} chunks deleted",
     "pagination_info": "Showing {start}-{end} / {total} total",
+    "pagination_info_v2": "Page {current}/{total}, {count} chunks total",
     "pagination_page": "Page {current} / {total}"
   },
   "chunk_dialog": {

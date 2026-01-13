@@ -298,7 +298,7 @@ def get_files_list_paginated(
 
 def get_chunks_by_file_id(file_id: int) -> Optional[List[Dict[str, Any]]]:
     """
-    获取文件的所有切片
+    获取文件的所有切片（保留，供非UI场景使用）
 
     Args:
         file_id: 文件 ID
@@ -311,6 +311,51 @@ def get_chunks_by_file_id(file_id: int) -> Optional[List[Dict[str, Any]]]:
         return None
 
     return _chunk_repo.find_by_file_id(file_id)
+
+
+def get_chunks_paginated(
+    file_id: int,
+    page: int = 1,
+    page_size: int = 50
+) -> Optional[Dict[str, Any]]:
+    """
+    分页获取文件的切片
+
+    Args:
+        file_id: 文件 ID
+        page: 页码（从1开始）
+        page_size: 每页数量
+
+    Returns:
+        {
+            "chunks": [...],      # 当前页切片列表
+            "total": 1000,        # 总切片数
+            "page": 1,            # 当前页码
+            "page_size": 50,      # 每页数量
+            "total_pages": 20     # 总页数
+        }
+        如果文件不存在返回 None
+    """
+    # 先检查文件是否存在
+    if not _file_repo.exists(file_id):
+        return None
+
+    # 查询总数
+    total = _chunk_repo.count_by_file_id(file_id)
+
+    # 查询当前页数据
+    chunks = _chunk_repo.find_by_file_id_paginated(file_id, page, page_size)
+
+    # 计算总页数
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+    return {
+        "chunks": chunks,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages
+    }
 
 
 def delete_file(file_id: int) -> bool:

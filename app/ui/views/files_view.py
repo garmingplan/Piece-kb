@@ -251,7 +251,19 @@ def render_files_right(
                         )
                     return
 
-                if not state["chunks_data"]:
+                # 加载中状态
+                if not state["chunks_data"] and state.get("total_chunks", 0) > 0:
+                    with ui.column().classes(
+                        "w-full h-full items-center justify-center"
+                    ):
+                        ui.spinner(size="lg", color="primary")
+                        ui.label(t("chunks.loading")).classes(
+                            "text-sm mt-2 theme-text-muted"
+                        )
+                    return
+
+                # 文件无切片
+                if state.get("total_chunks", 0) == 0:
                     with ui.column().classes(
                         "w-full h-full items-center justify-center"
                     ):
@@ -300,16 +312,14 @@ def render_files_right(
                             )
 
                     # 分页控件
-                    total_chunks = len(state["chunks_data"])
+                    total_chunks = state.get("total_chunks", 0)
                     if total_chunks > state["chunk_page_size"]:
                         current_page = state["chunk_page"]
                         total_pages = chunk_handlers.get_total_chunk_pages()
-                        start_idx = (current_page - 1) * state["chunk_page_size"] + 1
-                        end_idx = min(current_page * state["chunk_page_size"], total_chunks)
 
                         with ui.row().classes("w-full items-center justify-between mt-4 pt-4").style("border-top: 1px solid var(--border-color)"):
                             # 左侧：统计信息
-                            ui.label(t("chunks.pagination_info", start=start_idx, end=end_idx, total=total_chunks)).classes("text-xs theme-text-muted")
+                            ui.label(t("chunks.pagination_info_v2", current=current_page, total=total_pages, count=total_chunks)).classes("text-xs theme-text-muted")
 
                             # 右侧：分页按钮
                             with ui.row().classes("items-center gap-2"):
@@ -331,11 +341,11 @@ def render_files_right(
                                     )
 
                                     # 回车键跳转
-                                    def handle_page_jump(e):
+                                    async def handle_page_jump(e):
                                         try:
                                             page = int(page_input.value)
                                             if 1 <= page <= total_pages:
-                                                chunk_handlers.go_to_chunk_page(page)
+                                                await chunk_handlers.go_to_chunk_page(page)
                                             else:
                                                 ui.notify(f"页码必须在 1-{total_pages} 之间", type="warning")
                                                 page_input.value = str(current_page)

@@ -130,61 +130,93 @@ class ChunkHandlers:
         self.on_task_created(task_id)
         self.on_refresh_files()
 
-    def _reload_chunks(self):
-        """重新加载当前文件的切片"""
+    async def _reload_chunks(self):
+        """重新加载当前文件的切片（异步 + 后端分页）"""
+        import asyncio
         from indexing.services import file_service
+
         if self.state["selected_file_id"]:
-            self.state["chunks_data"] = file_service.get_chunks_by_file_id(
-                self.state["selected_file_id"]
-            ) or []
+            # 异步加载第一页数据
+            result = await asyncio.to_thread(
+                file_service.get_chunks_paginated,
+                self.state["selected_file_id"],
+                page=1,
+                page_size=self.state["chunk_page_size"]
+            )
+
+            # 更新状态
+            if result:
+                self.state["chunks_data"] = result["chunks"]
+                self.state["total_chunks"] = result["total"]
+                self.state["total_chunk_pages"] = result["total_pages"]
+            else:
+                self.state["chunks_data"] = []
+                self.state["total_chunks"] = 0
+                self.state["total_chunk_pages"] = 1
+
             # 重置分页到第一页
             self.state["chunk_page"] = 1
+
             if self.ui_refs.get("chunk_inspector"):
                 self.ui_refs["chunk_inspector"].refresh()
 
     # ==================== 分页功能 ====================
 
-    def go_to_chunk_page(self, page: int):
-        """跳转到指定页"""
+    async def go_to_chunk_page(self, page: int):
+        """跳转到指定页（异步加载）"""
+        import asyncio
+        from indexing.services import file_service
+
         total_pages = self.get_total_chunk_pages()
         if page < 1:
             page = 1
         elif page > total_pages:
             page = total_pages
+
+        # 更新页码
         self.state["chunk_page"] = page
+
+        # 清空数据，显示加载状态
+        self.state["chunks_data"] = []
         if self.ui_refs.get("chunk_inspector"):
             self.ui_refs["chunk_inspector"].refresh()
 
-    def prev_chunk_page(self):
-        """上一页"""
-        if self.state["chunk_page"] > 1:
-            self.state["chunk_page"] -= 1
-            if self.ui_refs.get("chunk_inspector"):
-                self.ui_refs["chunk_inspector"].refresh()
+        # 异步加载新页数据
+        result = await asyncio.to_thread(
+            file_service.get_chunks_paginated,
+            self.state["selected_file_id"],
+            page=page,
+            page_size=self.state["chunk_page_size"]
+        )
 
-    def next_chunk_page(self):
-        """下一页"""
+        # 更新数据
+        if result:
+            self.state["chunks_data"] = result["chunks"]
+        else:
+            self.state["chunks_data"] = []
+
+        # 刷新 UI
+        if self.ui_refs.get("chunk_inspector"):
+            self.ui_refs["chunk_inspector"].refresh()
+
+    async def prev_chunk_page(self):
+        """上一页（异步加载）"""
+        if self.state["chunk_page"] > 1:
+            await self.go_to_chunk_page(self.state["chunk_page"] - 1)
+
+    async def next_chunk_page(self):
+        """下一页（异步加载）"""
         total_pages = self.get_total_chunk_pages()
         if self.state["chunk_page"] < total_pages:
-            self.state["chunk_page"] += 1
-            if self.ui_refs.get("chunk_inspector"):
-                self.ui_refs["chunk_inspector"].refresh()
+            await self.go_to_chunk_page(self.state["chunk_page"] + 1)
 
     def get_total_chunk_pages(self) -> int:
-        """获取总页数"""
-        total_chunks = len(self.state["chunks_data"])
-        page_size = self.state["chunk_page_size"]
-        if total_chunks == 0:
-            return 1
-        return (total_chunks + page_size - 1) // page_size
+        """获取总页数（从状态中读取）"""
+        return self.state.get("total_chunk_pages", 1)
 
     def get_visible_chunks(self) -> list:
-        """获取当前页可见的切片"""
-        page = self.state["chunk_page"]
-        page_size = self.state["chunk_page_size"]
-        start = (page - 1) * page_size
-        end = start + page_size
-        return self.state["chunks_data"][start:end]
+        """获取当前页可见的切片（后端分页，直接返回）"""
+        return self.state["chunks_data"]
 
     # ==================== 批量删除功能 ====================
 
