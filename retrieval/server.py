@@ -72,7 +72,7 @@ async def resolve_keywords_tool(
 
 @mcp.tool(
     name="get-docs",
-    description="Retrieves full document content for specified doc_titles (up to 3). Input exact doc_title strings from resolve-keywords results.",
+    description="Retrieves full document content and metadata for specified doc_titles (up to 3). Returns chunk_id, file_id, filename, chunk_text, total_chunks_in_file, and chunk_index_in_file for each document. Input exact doc_title strings from resolve-keywords results.",
     tags={"docs", "retrieval"},
 )
 async def get_docs_tool(
@@ -124,9 +124,9 @@ async def get_docs_tool(
         not_found = []
 
         for title in doc_titles:
-            content = docs_mapping.get(title)
-            if content is not None:
-                documents[title] = content
+            doc_info = docs_mapping.get(title)
+            if doc_info is not None:
+                documents[title] = doc_info
             else:
                 not_found.append(title)
 
