@@ -241,6 +241,61 @@ def get_files_list(status: Optional[str] = None) -> List[Dict[str, Any]]:
         return _file_repo.find_all_ordered(order_by="created_at", desc=True)
 
 
+def get_files_list_paginated(
+    limit: int = 20,
+    offset: int = 0,
+    status: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    获取文件列表（支持分页和状态过滤）
+
+    Args:
+        limit: 每页数量（默认 20）
+        offset: 偏移量（默认 0）
+        status: 可选，按状态筛选 ('pending', 'indexed', 'error', 'empty')
+
+    Returns:
+        {
+            "files": 文件列表,
+            "total": 总文件数,
+            "limit": 每页数量,
+            "offset": 偏移量
+        }
+    """
+    # 获取总数
+    if status:
+        total = len(_file_repo.find_by_status(status))
+    else:
+        total = _file_repo.count()
+
+    # 获取分页数据
+    with get_db_cursor() as cursor:
+        if status:
+            sql = """
+                SELECT * FROM files
+                WHERE status = ?
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """
+            cursor.execute(sql, (status, limit, offset))
+        else:
+            sql = """
+                SELECT * FROM files
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """
+            cursor.execute(sql, (limit, offset))
+
+        files = [_file_repo._row_to_dict(row) for row in cursor.fetchall()]
+
+    return {
+        "files": files,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
+
+
 def get_chunks_by_file_id(file_id: int) -> Optional[List[Dict[str, Any]]]:
     """
     获取文件的所有切片

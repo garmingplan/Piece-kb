@@ -5,16 +5,20 @@ SQLite检索MCP服务 - 主入口文件
 2. get-docs: 精确文档获取（最多接受3个关键词）
 """
 
+import json
 from fastmcp import FastMCP, Context
-from typing import List, Annotated
+from typing import List, Annotated, Union
 from pydantic import Field
 
 from .tools import resolve_database_keywords, get_docs
 
 # 创建FastMCP服务实例
+# FastMCP 2.14.0+ 支持 strict_input_validation 参数
+# 设置为 False 启用灵活验证模式，自动转换字符串参数（如 "5" -> 5）
 mcp = FastMCP(
     name="piece-kb",
     instructions="Piece searches user's personal documents. Call resolve-keywords to find relevant documents, then get-docs to retrieve content.",
+    strict_input_validation=False,
 )
 
 
@@ -74,7 +78,7 @@ async def resolve_keywords_tool(
 async def get_docs_tool(
     ctx: Context,
     doc_titles: Annotated[
-        List[str], Field(description="List of doc_titles to retrieve (max 3)")
+        Union[List[str], str], Field(description="List of doc_titles to retrieve (max 3), supports list or JSON string")
     ],
     include_metadata: Annotated[
         bool,
@@ -87,6 +91,18 @@ async def get_docs_tool(
         ),
     ] = 3,
 ) -> dict:
+    # 处理字符串形式的列表（某些模型会传递 '["title1","title2"]' 而不是 ["title1","title2"]）
+    if isinstance(doc_titles, str):
+        try:
+            doc_titles = json.loads(doc_titles)
+        except json.JSONDecodeError:
+            await ctx.error(f"[Tool 2] Invalid doc_titles format: {doc_titles}")
+            return {
+                "documents": {},
+                "not_found": [],
+                "error": "Invalid doc_titles format, should be a list or JSON array string"
+            }
+
     # 限制最多3个doc_title
     limit = min(max_docs, 3) if max_docs else 3
     if len(doc_titles) > limit:

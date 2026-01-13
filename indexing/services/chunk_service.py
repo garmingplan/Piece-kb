@@ -148,6 +148,114 @@ def delete_chunk(chunk_id: int) -> Dict[str, Any]:
         return {"success": False, "error": str(e), "file_id": file_id}
 
 
+def batch_delete_chunks(chunk_ids: List[int]) -> Dict[str, Any]:
+    """
+    批量删除切片
+
+    流程:
+    1. 验证所有切片是否存在
+    2. 按文件分组
+    3. 逐个删除切片
+    4. 对于每个文件，检查是否需要删除整个文件或重建工作文件
+
+    Args:
+        chunk_ids: 切片 ID 列表
+
+    Returns:
+        {
+            "success": bool,
+            "deleted_count": int,  # 成功删除的切片数
+            "failed_count": int,   # 失败的切片数
+            "deleted_files": List[int],  # 被删除的文件 ID 列表
+            "errors": List[str]  # 错误信息列表
+        }
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    if not chunk_ids:
+        return {
+            "success": False,
+            "deleted_count": 0,
+            "failed_count": 0,
+            "deleted_files": [],
+            "errors": ["切片 ID 列表不能为空"]
+        }
+
+    deleted_count = 0
+    failed_count = 0
+    deleted_files = []
+    errors = []
+    affected_files = set()  # 受影响的文件 ID
+
+    # 按文件分组切片
+    file_chunks_map = {}  # {file_id: [chunk_id, ...]}
+
+    for chunk_id in chunk_ids:
+        chunk = _chunk_repo.find_by_id(chunk_id)
+        if not chunk:
+            failed_count += 1
+            errors.append(f"切片不存在 (ID: {chunk_id})")
+            continue
+
+        file_id = chunk["file_id"]
+        if file_id not in file_chunks_map:
+            file_chunks_map[file_id] = []
+        file_chunks_map[file_id].append(chunk_id)
+
+    # 逐个文件处理
+    for file_id, chunks_to_delete in file_chunks_map.items():
+        try:
+            # 获取文件的总切片数
+            total_chunks = _chunk_repo.count_by_file_id(file_id)
+
+            # 如果要删除的切片数 >= 总切片数，删除整个文件
+            if len(chunks_to_delete) >= total_chunks:
+                success = file_service.delete_file(file_id)
+                if success:
+                    deleted_count += len(chunks_to_delete)
+                    deleted_files.append(file_id)
+                    logger.info(f"[Batch Delete] 删除文件: file_id={file_id}")
+                else:
+                    failed_count += len(chunks_to_delete)
+                    errors.append(f"删除文件失败 (file_id: {file_id})")
+            else:
+                # 删除部分切片
+                for chunk_id in chunks_to_delete:
+                    try:
+                        _chunk_repo.delete_with_vectors(chunk_id)
+                        deleted_count += 1
+                        affected_files.add(file_id)
+                    except Exception as e:
+                        failed_count += 1
+                        errors.append(f"删除切片失败 (ID: {chunk_id}): {str(e)}")
+
+        except Exception as e:
+            failed_count += len(chunks_to_delete)
+            errors.append(f"处理文件失败 (file_id: {file_id}): {str(e)}")
+
+    # 重建受影响文件的工作文件
+    for file_id in affected_files:
+        try:
+            rebuild_working_file(file_id)
+        except Exception as e:
+            logger.error(f"[Batch Delete] 重建工作文件失败: file_id={file_id}, error={e}")
+            errors.append(f"重建工作文件失败 (file_id: {file_id})")
+
+    logger.info(
+        f"[Batch Delete] 完成: deleted={deleted_count}, "
+        f"failed={failed_count}, deleted_files={deleted_files}"
+    )
+
+    return {
+        "success": failed_count == 0,
+        "deleted_count": deleted_count,
+        "failed_count": failed_count,
+        "deleted_files": deleted_files,
+        "errors": errors
+    }
+
+
 # ========== 修改操作 ==========
 
 

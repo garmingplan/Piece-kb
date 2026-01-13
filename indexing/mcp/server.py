@@ -5,6 +5,8 @@
 """
 
 import logging
+import json
+from typing import List, Union
 from fastmcp import FastMCP
 
 from indexing.mcp.tools.file_tools import create_empty_file, delete_file
@@ -12,19 +14,35 @@ from indexing.mcp.tools.chunk_tools import (
     create_chunk,
     update_chunk_content,
     delete_chunk,
+    batch_delete_chunks,
 )
 from indexing.mcp.tools.task_tools import get_task_status
+from indexing.mcp.tools.query_tools import (
+    list_files,
+    get_file_info,
+    get_chunk_info,
+    get_storage_stats,
+)
 
 logger = logging.getLogger(__name__)
 
 # 创建 FastMCP 实例
+# FastMCP 2.14.0+ 支持 strict_input_validation 参数
+# 设置为 False 启用灵活验证模式，自动转换字符串参数（如 "5" -> 5）
 mcp = FastMCP(
     "piece-index",
     instructions="""
 Piece 索引 MCP 服务 - 用户个人知识库文件和切片管理工具
 
 注意：add_chunk 需要文件 ID，如果文件不存在请先使用 create_file 创建。
+
+工具分类：
+- 文件管理：create_file, remove_file, list_files, get_file_info
+- 切片管理：add_chunk, modify_chunk_content, remove_chunk, batch_delete_chunks, get_chunk_info
+- 任务管理：check_task_status
+- 统计查询：get_storage_stats
 """,
+    strict_input_validation=False,
 )
 
 
@@ -73,6 +91,52 @@ def remove_file(file_id: int) -> dict:
     """
     logger.info(f"[MCP Tool] remove_file: file_id={file_id}")
     return delete_file(file_id)
+
+
+@mcp.tool()
+def query_files(limit: int = 20, offset: int = 0, status: str = None) -> dict:
+    """
+    列出所有文件（支持分页和状态过滤）
+
+    Args:
+        limit: 每页数量（默认 20，最大 100）
+        offset: 偏移量（默认 0）
+        status: 可选，按状态筛选 ('pending', 'indexed', 'error', 'empty')
+
+    Returns:
+        包含文件列表的字典：
+        - success: 是否成功
+        - message: 结果消息
+        - data: 文件数据（files, total, limit, offset）
+
+    Example:
+        查询前 10 个已索引的文件：
+        >>> query_files(limit=10, offset=0, status="indexed")
+    """
+    logger.info(f"[MCP Tool] query_files: limit={limit}, offset={offset}, status={status}")
+    return list_files(limit=limit, offset=offset, status=status)
+
+
+@mcp.tool()
+def query_file_info(file_id: int) -> dict:
+    """
+    获取文件详情（包含切片数量等统计信息）
+
+    Args:
+        file_id: 文件 ID
+
+    Returns:
+        包含文件详情的字典：
+        - success: 是否成功
+        - message: 结果消息
+        - data: 文件详细信息（包含 chunks_count）
+
+    Example:
+        获取文件 123 的详情：
+        >>> query_file_info(123)
+    """
+    logger.info(f"[MCP Tool] query_file_info: file_id={file_id}")
+    return get_file_info(file_id)
 
 
 # ==================== 切片管理工具 ====================
@@ -190,6 +254,65 @@ def remove_chunk(chunk_id: int) -> dict:
     return delete_chunk(chunk_id)
 
 
+@mcp.tool()
+def batch_remove_chunks(chunk_ids: Union[list, str]) -> dict:
+    """
+    批量删除切片（同步删除向量）
+
+    Args:
+        chunk_ids: 切片 ID 列表（支持列表或字符串形式）
+
+    Returns:
+        包含批量删除结果的字典：
+        - success: 是否成功
+        - message: 结果消息
+        - data: 删除统计（deleted_count, failed_count, deleted_files, errors）
+
+    Example:
+        批量删除切片 456, 457, 458：
+        >>> batch_remove_chunks([456, 457, 458])
+
+    Note:
+        如果删除的切片数量等于文件的总切片数，会自动删除整个文件。
+    """
+    # 处理字符串形式的列表（某些模型会传递 "[1,2,3]" 而不是 [1,2,3]）
+    if isinstance(chunk_ids, str):
+        try:
+            chunk_ids = json.loads(chunk_ids)
+        except json.JSONDecodeError:
+            logger.error(f"[MCP Tool] batch_remove_chunks: 无效的 chunk_ids 格式: {chunk_ids}")
+            return {
+                "success": False,
+                "message": f"无效的 chunk_ids 格式，应为列表或 JSON 数组字符串",
+                "data": None
+            }
+
+    logger.info(f"[MCP Tool] batch_remove_chunks: chunk_ids={chunk_ids}")
+    return batch_delete_chunks(chunk_ids)
+
+
+@mcp.tool()
+def query_chunk_info(chunk_id: int) -> dict:
+    """
+    获取切片详情
+
+    Args:
+        chunk_id: 切片 ID
+
+    Returns:
+        包含切片详情的字典：
+        - success: 是否成功
+        - message: 结果消息
+        - data: 切片详细信息（id, file_id, doc_title, chunk_text）
+
+    Example:
+        获取切片 456 的详情：
+        >>> query_chunk_info(456)
+    """
+    logger.info(f"[MCP Tool] query_chunk_info: chunk_id={chunk_id}")
+    return get_chunk_info(chunk_id)
+
+
 # ==================== 任务管理工具 ====================
 
 
@@ -225,6 +348,38 @@ def check_task_status(task_id: int) -> dict:
     return get_task_status(task_id)
 
 
+# ==================== 统计查询工具 ====================
+
+
+@mcp.tool()
+def query_storage_stats() -> dict:
+    """
+    获取存储统计信息
+
+    Returns:
+        包含存储统计的字典：
+        - success: 是否成功
+        - message: 结果消息
+        - data: 统计数据（total_files, indexed_files, total_chunks, total_size）
+
+    Example:
+        获取存储统计：
+        >>> query_storage_stats()
+        {
+            "success": True,
+            "message": "查询成功",
+            "data": {
+                "total_files": 50,
+                "indexed_files": 45,
+                "total_chunks": 1250,
+                "total_size": 52428800
+            }
+        }
+    """
+    logger.info(f"[MCP Tool] query_storage_stats")
+    return get_storage_stats()
+
+
 # ==================== 服务信息 ====================
 
 
@@ -232,15 +387,24 @@ def get_server_info() -> dict:
     """获取服务信息"""
     return {
         "name": "piece-index",
-        "version": "0.1.0",
-        "description": "Piece 索引 MCP 服务 - 提供文件和切片的 CRUD 操作",
+        "version": "0.2.0",
+        "description": "Piece 索引 MCP 服务 - 提供文件和切片的完整 CRUD 操作及查询统计功能",
         "tools": [
+            # 文件管理 (4)
             "create_file",
             "remove_file",
+            "query_files",
+            "query_file_info",
+            # 切片管理 (5)
             "add_chunk",
             "modify_chunk_content",
             "remove_chunk",
+            "batch_remove_chunks",
+            "query_chunk_info",
+            # 任务管理 (1)
             "check_task_status",
+            # 统计查询 (1)
+            "query_storage_stats",
         ],
     }
 

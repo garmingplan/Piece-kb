@@ -11,6 +11,7 @@ from indexing.services.chunk_service import (
     create_chunk_update_task,
     delete_chunk as _delete_chunk,
     get_chunk_by_id as _get_chunk_by_id,
+    batch_delete_chunks as _batch_delete_chunks,
 )
 
 logger = logging.getLogger(__name__)
@@ -259,3 +260,84 @@ def delete_chunk(chunk_id: int) -> Dict[str, Any]:
             "message": f"删除切片失败: {str(e)}",
             "data": None
         }
+
+
+def batch_delete_chunks(chunk_ids: list) -> Dict[str, Any]:
+    """
+    批量删除切片（同步删除向量）
+
+    注意：如果删除的切片数量等于文件的总切片数，会自动删除整个文件。
+
+    Args:
+        chunk_ids: 切片 ID 列表
+
+    Returns:
+        {
+            "success": bool,
+            "message": str,
+            "data": {
+                "deleted_count": int,      # 成功删除的切片数
+                "failed_count": int,       # 失败的切片数
+                "deleted_files": List[int], # 被删除的文件 ID 列表
+                "errors": List[str]        # 错误信息列表
+            }
+        }
+
+    Example:
+        >>> batch_delete_chunks([456, 457, 458])
+        {
+            "success": True,
+            "message": "批量删除成功",
+            "data": {
+                "deleted_count": 3,
+                "failed_count": 0,
+                "deleted_files": [],
+                "errors": []
+            }
+        }
+    """
+    try:
+        # 参数验证
+        if not chunk_ids:
+            return {
+                "success": False,
+                "message": "切片 ID 列表不能为空",
+                "data": None
+            }
+
+        if not isinstance(chunk_ids, list):
+            return {
+                "success": False,
+                "message": "chunk_ids 必须是列表",
+                "data": None
+            }
+
+        # 调用业务逻辑层
+        result = _batch_delete_chunks(chunk_ids)
+
+        logger.info(
+            f"[MCP] 批量删除切片: deleted={result['deleted_count']}, "
+            f"failed={result['failed_count']}, deleted_files={result['deleted_files']}"
+        )
+
+        message = "批量删除成功" if result["success"] else "批量删除部分失败"
+
+        return {
+            "success": result["success"],
+            "message": message,
+            "data": {
+                "deleted_count": result["deleted_count"],
+                "failed_count": result["failed_count"],
+                "deleted_files": result["deleted_files"],
+                "errors": result["errors"]
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"[MCP] 批量删除切片异常: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "message": f"批量删除切片失败: {str(e)}",
+            "data": None
+        }
+

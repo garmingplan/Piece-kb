@@ -26,6 +26,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -38,6 +41,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "serverUrl": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "serverUrl": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -52,6 +58,10 @@ MCP_CLIENTS = [
                     "piece-kb": {
                         "type": "http",
                         "url": "http://localhost:{port}/mcp"
+                    },
+                    "piece-index": {
+                        "type": "http",
+                        "url": "http://localhost:{index_port}/mcp"
                     }
                 }
             }
@@ -66,6 +76,10 @@ MCP_CLIENTS = [
                 "piece-kb": {
                     "type": "http",
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "type": "http",
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -79,6 +93,10 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp",
+                    "type": "streamableHttp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp",
                     "type": "streamableHttp"
                 }
             }
@@ -94,6 +112,10 @@ MCP_CLIENTS = [
                     "piece-kb": {
                         "type": "http",
                         "url": "http://localhost:{port}/mcp"
+                    },
+                    "piece-index": {
+                        "type": "http",
+                        "url": "http://localhost:{index_port}/mcp"
                     }
                 }
             }
@@ -108,6 +130,10 @@ MCP_CLIENTS = [
                 "piece-kb": {
                     "type": "http",
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "type": "http",
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -122,6 +148,10 @@ MCP_CLIENTS = [
                     {
                         "name": "piece-kb",
                         "url": "http://localhost:{port}/mcp"
+                    },
+                    {
+                        "name": "piece-index",
+                        "url": "http://localhost:{index_port}/mcp"
                     }
                 ]
             }
@@ -136,6 +166,10 @@ MCP_CLIENTS = [
                 "piece-kb": {
                     "type": "streamable-http",
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "type": "streamable-http",
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -150,6 +184,11 @@ MCP_CLIENTS = [
                     "type": "streamable-http",
                     "url": "http://localhost:{port}/mcp",
                     "disabled": False
+                },
+                "piece-index": {
+                    "type": "streamable-http",
+                    "url": "http://localhost:{index_port}/mcp",
+                    "disabled": False
                 }
             }
         }
@@ -162,6 +201,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -175,6 +217,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -188,6 +233,10 @@ MCP_CLIENTS = [
                 "piece-kb": {
                     "type": "http",
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "type": "http",
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -201,6 +250,10 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp",
+                    "type": "streamableHttp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp",
                     "type": "streamableHttp"
                 }
             }
@@ -216,6 +269,11 @@ MCP_CLIENTS = [
                     "type": "remote",
                     "url": "http://localhost:{port}/mcp",
                     "enabled": True
+                },
+                "piece-index": {
+                    "type": "remote",
+                    "url": "http://localhost:{index_port}/mcp",
+                    "enabled": True
                 }
             }
         }
@@ -228,6 +286,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -240,6 +301,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -252,6 +316,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -265,6 +332,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -277,6 +347,11 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp",
+                    "disabled": False,
+                    "autoApprove": []
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp",
                     "disabled": False,
                     "autoApprove": []
                 }
@@ -292,6 +367,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "httpUrl": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "httpUrl": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -304,6 +382,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "httpUrl": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "httpUrl": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -315,10 +396,13 @@ MCP_CLIENTS = [
         "config": {
             "[mcp_servers.piece-kb]": {
                 "url": "http://localhost:{port}/mcp"
+            },
+            "[mcp_servers.piece-index]": {
+                "url": "http://localhost:{index_port}/mcp"
             }
         },
         "format": "toml",
-        "config_text": "[mcp_servers.piece-kb]\nurl = \"http://localhost:{port}/mcp\""
+        "config_text": "[mcp_servers.piece-kb]\nurl = \"http://localhost:{port}/mcp\"\n\n[mcp_servers.piece-index]\nurl = \"http://localhost:{index_port}/mcp\""
     },
     {
         "id": "copilot_cli",
@@ -329,6 +413,10 @@ MCP_CLIENTS = [
                 "piece-kb": {
                     "type": "http",
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "type": "http",
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -341,6 +429,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -354,6 +445,10 @@ MCP_CLIENTS = [
                 "piece-kb": {
                     "type": "http",
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "type": "http",
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -367,6 +462,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -379,6 +477,10 @@ MCP_CLIENTS = [
             "piece-kb": {
                 "url": "http://localhost:{port}/mcp",
                 "start_on_launch": True
+            },
+            "piece-index": {
+                "url": "http://localhost:{index_port}/mcp",
+                "start_on_launch": True
             }
         }
     },
@@ -390,6 +492,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -402,6 +507,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -415,6 +523,10 @@ MCP_CLIENTS = [
                 "piece-kb": {
                     "type": "http",
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "type": "http",
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -427,6 +539,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "url": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "url": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -439,6 +554,9 @@ MCP_CLIENTS = [
             "mcpServers": {
                 "piece-kb": {
                     "serverUrl": "http://localhost:{port}/mcp"
+                },
+                "piece-index": {
+                    "serverUrl": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -450,11 +568,13 @@ def _get_config_json(client: dict) -> str:
     """
     获取客户端配置字符串
 
-    替换 {port} 占位符为实际端口
+    替换 {port} 占位符为实际端口（检索 MCP）
+    替换 {index_port} 占位符为索引 MCP 端口
     支持 JSON 和 TOML 格式
     """
     settings = get_settings()
-    port = settings.mcp.port
+    retrieval_port = settings.mcp.port  # 检索 MCP 端口（8686）
+    index_port = settings.mcp.port + 1  # 索引 MCP 端口（8687）
 
     # 如果有 config_text 字段（如 TOML 格式），直接使用
     if "config_text" in client:
@@ -464,7 +584,8 @@ def _get_config_json(client: dict) -> str:
         config_str = json.dumps(client["config"], indent=2, ensure_ascii=False)
 
     # 替换端口占位符
-    config_str = config_str.replace("{port}", str(port))
+    config_str = config_str.replace("{port}", str(retrieval_port))
+    config_str = config_str.replace("{index_port}", str(index_port))
 
     return config_str
 
