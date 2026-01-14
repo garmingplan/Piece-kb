@@ -15,10 +15,12 @@ class State(TypedDict):
     """LangGraph工作流状态 - 两路检索架构"""
     # 输入
     query: str  # 用户查询文本
+    filenames: Optional[List[str]]  # 限定检索的文件名列表（可选，模糊匹配）
 
     # 预处理
     cleaned_query: Optional[str]  # 清洗后的查询文本
     tokens: Optional[List[str]]  # 分词结果
+    file_ids: Optional[List[int]]  # 解析后的文件ID列表（用于过滤检索）
 
     # 向量化
     query_embedding: Optional[List[float]]  # 查询向量

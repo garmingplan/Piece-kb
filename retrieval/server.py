@@ -7,7 +7,7 @@ SQLite检索MCP服务 - 主入口文件
 
 import json
 from fastmcp import FastMCP, Context
-from typing import List, Annotated, Union
+from typing import List, Annotated, Union, Optional
 from pydantic import Field
 
 from .tools import resolve_database_keywords, get_docs
@@ -24,7 +24,7 @@ mcp = FastMCP(
 
 @mcp.tool(
     name="resolve-keywords",
-    description="Resolves queries to relevant document keywords (doc_title). Returns up to 20 keyword candidates with confidence scores. Select keywords based on relevance to user's specific question, not solely by score ranking.",
+    description="Resolves queries to relevant document keywords (doc_title). Returns up to 20 keyword candidates with confidence scores. Select keywords based on relevance to user's specific question, not solely by score ranking. Optionally filter by filenames to search within specific documents.",
     tags={"retrieval", "keywords"},
 )
 async def resolve_keywords_tool(
@@ -32,6 +32,10 @@ async def resolve_keywords_tool(
     query: Annotated[
         str, Field(description="Query text to search for relevant documents")
     ],
+    filenames: Annotated[
+        Optional[Union[List[str], str]],
+        Field(description="Optional list of filenames to filter search scope (fuzzy match). Example: ['深度学习'] matches '深度学习.md'. If not provided or no match found, searches all documents.")
+    ] = None,
     max_results: Annotated[
         int,
         Field(
@@ -39,11 +43,19 @@ async def resolve_keywords_tool(
         ),
     ] = 20,
 ) -> dict:
-    await ctx.info(f"[Tool 1] Resolving query: {query}, max_results: {max_results}")
+    # 处理字符串形式的列表（某些模型会传递 '["name1","name2"]' 而不是 ["name1","name2"]）
+    if isinstance(filenames, str):
+        try:
+            filenames = json.loads(filenames)
+        except json.JSONDecodeError:
+            # 单个文件名字符串，转为列表
+            filenames = [filenames] if filenames else None
+
+    await ctx.info(f"[Tool 1] Resolving query: {query}, max_results: {max_results}, filenames: {filenames}")
 
     try:
-        # 调用核心工作流
-        result = await resolve_database_keywords(query)
+        # 调用核心工作流（传递可选的文件名过滤）
+        result = await resolve_database_keywords(query, filenames=filenames)
 
         keywords = result.get("keywords", [])
         # 如果需要，可以根据max_results截断结果

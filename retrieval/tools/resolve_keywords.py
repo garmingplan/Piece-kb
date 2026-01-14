@@ -3,7 +3,7 @@
 根据用户查询解析出相关的数据库关键词（doc_title）
 使用 LangGraph 工作流实现两路检索 + RRF 重排序
 """
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from langgraph.graph import StateGraph, END
 
 from ..nodes import (
@@ -62,12 +62,16 @@ def build_graph():
     return workflow.compile()
 
 
-async def resolve_database_keywords(query: str) -> Dict[str, Any]:
+async def resolve_database_keywords(
+    query: str,
+    filenames: Optional[List[str]] = None
+) -> Dict[str, Any]:
     """
     根据查询解析数据库关键词（两路检索架构）
 
     Args:
         query: 用户查询文本
+        filenames: 限定检索的文件名列表（可选，模糊匹配）
 
     Returns:
         {
@@ -79,7 +83,8 @@ async def resolve_database_keywords(query: str) -> Dict[str, Any]:
                 "tokens": ["分词1", "分词2"],
                 "bm25_recall_count": 10,     # BM25检索召回数
                 "vector_recall_count": 10,   # 向量检索召回数
-                "total_fused_results": 20    # RRF融合后总数
+                "total_fused_results": 20,   # RRF融合后总数
+                "file_filter": ["文件名1", ...]  # 文件过滤条件（如有）
             }
         }
     """
@@ -89,8 +94,10 @@ async def resolve_database_keywords(query: str) -> Dict[str, Any]:
     # 初始化状态（两路检索架构）
     initial_state: State = {
         "query": query,
+        "filenames": filenames,  # 可选的文件名过滤
         "cleaned_query": None,
         "tokens": None,
+        "file_ids": None,  # 由 preprocess_node 解析
         "query_embedding": None,
         "bm25_results": None,     # chunk_text BM25检索结果
         "vector_results": None,   # embedding向量检索结果
@@ -108,9 +115,14 @@ async def resolve_database_keywords(query: str) -> Dict[str, Any]:
     if final_state.get("error"):
         raise Exception(final_state["error"])
 
+    # 获取统计信息并添加文件过滤信息
+    stats = final_state.get("stats", {})
+    if filenames:
+        stats["file_filter"] = filenames
+
     # 返回结果
     return {
         "keywords": final_state.get("final_keywords", []),
         "confidence_scores": final_state.get("confidence_scores", {}),
-        "stats": final_state.get("stats", {}),
+        "stats": stats,
     }

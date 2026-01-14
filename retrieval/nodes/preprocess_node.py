@@ -1,9 +1,11 @@
 """
-查询预处理节点：文本清洗、格式验证、分词、状态初始化
+查询预处理节点：文本清洗、格式验证、分词、文件名解析、状态初始化
 """
 import jieba
+from typing import List, Optional
 from .state import State
 from ..config import config
+from ..db import get_db_cursor
 
 
 def tokenize_query(query: str) -> list[str]:
@@ -32,6 +34,40 @@ def tokenize_query(query: str) -> list[str]:
     return tokens
 
 
+def resolve_filenames_to_ids(filenames: Optional[List[str]]) -> Optional[List[int]]:
+    """
+    将文件名列表解析为文件ID列表（模糊匹配）
+
+    Args:
+        filenames: 文件名列表（可选）
+
+    Returns:
+        匹配到的文件ID列表，如果没有匹配或参数为空则返回 None
+    """
+    if not filenames:
+        return None
+
+    try:
+        with get_db_cursor() as cursor:
+            file_ids = []
+            for filename in filenames:
+                # 模糊匹配：filename 包含用户输入的关键词
+                cursor.execute(
+                    "SELECT id FROM files WHERE filename LIKE ? AND status = 'indexed'",
+                    (f"%{filename}%",)
+                )
+                rows = cursor.fetchall()
+                file_ids.extend([row[0] for row in rows])
+
+            # 去重
+            file_ids = list(set(file_ids))
+            return file_ids if file_ids else None
+
+    except Exception:
+        # 解析失败时回退到全局检索
+        return None
+
+
 def preprocess_node(state: State) -> State:
     """
     查询预处理节点
@@ -40,7 +76,8 @@ def preprocess_node(state: State) -> State:
     1. 文本清洗（去除多余空白）
     2. 格式验证（检查是否为空）
     3. jieba分词
-    4. 状态初始化
+    4. 文件名解析（可选，模糊匹配转换为 file_ids）
+    5. 状态初始化
 
     Args:
         state: 当前状态
@@ -68,8 +105,13 @@ def preprocess_node(state: State) -> State:
             "cleaned_query": cleaned_query,
         }
 
+    # 文件名解析（可选参数，解析失败时回退到全局检索）
+    filenames = state.get("filenames")
+    file_ids = resolve_filenames_to_ids(filenames)
+
     # 更新状态
     return {
         "cleaned_query": cleaned_query,
         "tokens": tokens,
+        "file_ids": file_ids,
     }

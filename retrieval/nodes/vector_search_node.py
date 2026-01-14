@@ -21,7 +21,8 @@ def vector_search_node(state: State) -> dict:
     功能：
     1. 将查询文本向量化
     2. 使用sqlite-vec进行余弦相似度检索
-    3. 返回Top-K结果
+    3. 支持按 file_ids 过滤（可选）
+    4. 返回Top-K结果
 
     Args:
         state: 当前状态
@@ -39,6 +40,9 @@ def vector_search_node(state: State) -> dict:
             "error": "缺少清洗后的查询文本",
         }
 
+    # 获取文件ID过滤条件（可选）
+    file_ids = state.get("file_ids")
+
     try:
         # 初始化嵌入模型
         embedding_config = get_embedding_config()
@@ -50,23 +54,37 @@ def vector_search_node(state: State) -> dict:
 
         # 使用连接池
         with get_db_cursor() as cursor:
-            # 使用sqlite-vec进行向量检索
+            # 构建SQL查询
             # vec_chunks 的 chunk_id 对应 chunks 表的 id
             # vec_distance_cosine 返回余弦距离（0-2），转换为相似度（1 - distance/2）
-            query_sql = """
-                SELECT
-                    c.doc_title,
-                    1 - (vec_distance_cosine(v.embedding, ?) / 2) AS similarity
-                FROM vec_chunks v
-                JOIN chunks c ON v.chunk_id = c.id
-                ORDER BY vec_distance_cosine(v.embedding, ?)
-                LIMIT ?
-            """
+            if file_ids:
+                # 有文件过滤条件
+                placeholders = ",".join("?" * len(file_ids))
+                query_sql = f"""
+                    SELECT
+                        c.doc_title,
+                        1 - (vec_distance_cosine(v.embedding, ?) / 2) AS similarity
+                    FROM vec_chunks v
+                    JOIN chunks c ON v.chunk_id = c.id
+                    WHERE c.file_id IN ({placeholders})
+                    ORDER BY vec_distance_cosine(v.embedding, ?)
+                    LIMIT ?
+                """
+                params = [query_blob] + file_ids + [query_blob, config.search.vector_top_k]
+            else:
+                # 无文件过滤，全局检索
+                query_sql = """
+                    SELECT
+                        c.doc_title,
+                        1 - (vec_distance_cosine(v.embedding, ?) / 2) AS similarity
+                    FROM vec_chunks v
+                    JOIN chunks c ON v.chunk_id = c.id
+                    ORDER BY vec_distance_cosine(v.embedding, ?)
+                    LIMIT ?
+                """
+                params = [query_blob, query_blob, config.search.vector_top_k]
 
-            cursor.execute(
-                query_sql,
-                (query_blob, query_blob, config.search.vector_top_k),
-            )
+            cursor.execute(query_sql, params)
             rows = cursor.fetchall()
 
             # 转换为SearchResult列表

@@ -16,7 +16,8 @@ def bm25_search_node(state: State) -> dict:
     1. 使用预处理节点生成的tokens
     2. 使用SQLite FTS5对chunk_text字段进行全文检索
     3. 利用FTS5内置的BM25算法计算相关性分数
-    4. 返回按BM25分数排序的Top-K结果
+    4. 支持按 file_ids 过滤（可选）
+    5. 返回按BM25分数排序的Top-K结果
 
     适用场景：长文本内容的词频检索
 
@@ -36,6 +37,9 @@ def bm25_search_node(state: State) -> dict:
             "error": "缺少分词结果",
         }
 
+    # 获取文件ID过滤条件（可选）
+    file_ids = state.get("file_ids")
+
     try:
         # 使用连接池
         with get_db_cursor() as cursor:
@@ -43,22 +47,40 @@ def bm25_search_node(state: State) -> dict:
             # 使用OR连接多个词，实现宽松匹配
             query_str = " OR ".join(tokens)
 
+            # 构建SQL查询
             # 使用FTS5的bm25()函数获取相关性分数
             # bm25()返回负值，值越小表示相关性越高，所以取负数变为正值
-            # 注意：chunks_fts的rowid对应chunks表的id
-            query_sql = """
-                SELECT DISTINCT
-                    c.doc_title,
-                    -bm25(chunks_fts) AS bm25_score
-                FROM chunks_fts
-                JOIN chunks c ON chunks_fts.rowid = c.id
-                WHERE chunks_fts MATCH ?
-                ORDER BY bm25_score DESC
-                LIMIT ?
-            """
+            if file_ids:
+                # 有文件过滤条件
+                placeholders = ",".join("?" * len(file_ids))
+                query_sql = f"""
+                    SELECT DISTINCT
+                        c.doc_title,
+                        -bm25(chunks_fts) AS bm25_score
+                    FROM chunks_fts
+                    JOIN chunks c ON chunks_fts.rowid = c.id
+                    WHERE chunks_fts MATCH ?
+                      AND c.file_id IN ({placeholders})
+                    ORDER BY bm25_score DESC
+                    LIMIT ?
+                """
+                params = [query_str] + file_ids + [config.search.bm25_top_k]
+            else:
+                # 无文件过滤，全局检索
+                query_sql = """
+                    SELECT DISTINCT
+                        c.doc_title,
+                        -bm25(chunks_fts) AS bm25_score
+                    FROM chunks_fts
+                    JOIN chunks c ON chunks_fts.rowid = c.id
+                    WHERE chunks_fts MATCH ?
+                    ORDER BY bm25_score DESC
+                    LIMIT ?
+                """
+                params = [query_str, config.search.bm25_top_k]
 
             # 执行查询
-            cursor.execute(query_sql, (query_str, config.search.bm25_top_k))
+            cursor.execute(query_sql, params)
             rows = cursor.fetchall()
 
             # 转换为SearchResult列表
