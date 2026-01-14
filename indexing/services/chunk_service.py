@@ -8,7 +8,6 @@ Chunk 服务模块
 """
 
 import asyncio
-from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -21,6 +20,10 @@ from . import task_service
 from . import file_service
 from .rate_limiter import get_rate_limiter
 from ..repositories import ChunkRepository, FileRepository
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 # 初始化 Repository
 _chunk_repo = ChunkRepository()
@@ -60,7 +63,7 @@ def rebuild_working_file(file_id: int) -> None:
         chunk_text = chunk["chunk_text"]
 
         # 检查 chunk_text 是否已经包含标题（以 # 开头）
-        if chunk_text.strip().startswith('#'):
+        if chunk_text.strip().startswith("#"):
             # chunk_text 已包含标题，直接输出
             lines.append(f"{chunk_text}\n\n")
             continue
@@ -71,16 +74,16 @@ def rebuild_working_file(file_id: int) -> None:
 
         if len(title_parts) == 2:
             # 二级标题
-            clean_title = title_parts[1].lstrip('#').strip()
+            clean_title = title_parts[1].lstrip("#").strip()
             lines.append(f"## {clean_title}\n\n")
         elif len(title_parts) >= 3:
             # 三级标题
-            clean_title = title_parts[-1].lstrip('#').strip()
+            clean_title = title_parts[-1].lstrip("#").strip()
             lines.append(f"### {clean_title}\n\n")
         else:
             # 兜底：doc_title 格式不规范（无下划线或只有文件名）
             # 使用完整的 doc_title 作为二级标题
-            clean_title = doc_title.lstrip('#').strip()
+            clean_title = doc_title.lstrip("#").strip()
             lines.append(f"## {clean_title}\n\n")
 
         lines.append(f"{chunk_text}\n\n")
@@ -170,16 +173,13 @@ def batch_delete_chunks(chunk_ids: List[int]) -> Dict[str, Any]:
             "errors": List[str]  # 错误信息列表
         }
     """
-    import logging
-    logger = logging.getLogger(__name__)
-
     if not chunk_ids:
         return {
             "success": False,
             "deleted_count": 0,
             "failed_count": 0,
             "deleted_files": [],
-            "errors": ["切片 ID 列表不能为空"]
+            "errors": ["切片 ID 列表不能为空"],
         }
 
     deleted_count = 0
@@ -239,7 +239,9 @@ def batch_delete_chunks(chunk_ids: List[int]) -> Dict[str, Any]:
         try:
             rebuild_working_file(file_id)
         except Exception as e:
-            logger.error(f"[Batch Delete] 重建工作文件失败: file_id={file_id}, error={e}")
+            logger.error(
+                f"[Batch Delete] 重建工作文件失败: file_id={file_id}, error={e}"
+            )
             errors.append(f"重建工作文件失败 (file_id: {file_id})")
 
     logger.info(
@@ -252,7 +254,7 @@ def batch_delete_chunks(chunk_ids: List[int]) -> Dict[str, Any]:
         "deleted_count": deleted_count,
         "failed_count": failed_count,
         "deleted_files": deleted_files,
-        "errors": errors
+        "errors": errors,
     }
 
 
@@ -307,8 +309,7 @@ def create_chunk_update_task(chunk_id: int, chunk_text: str) -> int:
     with get_db_cursor() as cursor:
         task_data = f"CHUNK_UPDATE|{chunk_id}|{chunk_text}"
         cursor.execute(
-            "UPDATE tasks SET error_message = ? WHERE id = ?",
-            (task_data, task_id)
+            "UPDATE tasks SET error_message = ? WHERE id = ?", (task_data, task_id)
         )
 
     return task_id
@@ -326,7 +327,9 @@ async def process_chunk_update_task(task_id: int) -> None:
     """
     task = task_service.get_task(task_id)
     if not task or not task.get("error_message", "").startswith("CHUNK_UPDATE|"):
-        task_service.update_task_status(task_id, "failed", error_message="无效的任务数据")
+        task_service.update_task_status(
+            task_id, "failed", error_message="无效的任务数据"
+        )
         return
 
     try:
@@ -340,7 +343,9 @@ async def process_chunk_update_task(task_id: int) -> None:
         # 获取 embedding 配置
         config = get_embedding_config()
         if not config["api_key"]:
-            task_service.update_task_status(task_id, "failed", error_message="未配置 API Key")
+            task_service.update_task_status(
+                task_id, "failed", error_message="未配置 API Key"
+            )
             return
 
         task_service.update_task_status(task_id, "processing", progress=30)
@@ -374,8 +379,7 @@ async def process_chunk_update_task(task_id: int) -> None:
 
         # 完成任务，保存 chunk_id 到 error_message（用于返回给客户端）
         task_service.update_task_status(
-            task_id, "completed", progress=100,
-            error_message=f"CHUNK_ID:{chunk_id}"
+            task_id, "completed", progress=100, error_message=f"CHUNK_ID:{chunk_id}"
         )
 
     except Exception as e:
@@ -405,8 +409,7 @@ def create_chunk_add_task(file_id: int, doc_title: str, chunk_text: str) -> int:
     with get_db_cursor() as cursor:
         task_data = f"CHUNK_ADD|{file_id}|{doc_title}|{chunk_text}"
         cursor.execute(
-            "UPDATE tasks SET error_message = ? WHERE id = ?",
-            (task_data, task_id)
+            "UPDATE tasks SET error_message = ? WHERE id = ?", (task_data, task_id)
         )
 
     return task_id
@@ -425,7 +428,9 @@ async def process_chunk_add_task(task_id: int) -> None:
     """
     task = task_service.get_task(task_id)
     if not task or not task.get("error_message", "").startswith("CHUNK_ADD|"):
-        task_service.update_task_status(task_id, "failed", error_message="无效的任务数据")
+        task_service.update_task_status(
+            task_id, "failed", error_message="无效的任务数据"
+        )
         return
 
     try:
@@ -440,7 +445,9 @@ async def process_chunk_add_task(task_id: int) -> None:
         # 获取 embedding 配置
         config = get_embedding_config()
         if not config["api_key"]:
-            task_service.update_task_status(task_id, "failed", error_message="未配置 API Key")
+            task_service.update_task_status(
+                task_id, "failed", error_message="未配置 API Key"
+            )
             return
 
         task_service.update_task_status(task_id, "processing", progress=30)
@@ -471,8 +478,7 @@ async def process_chunk_add_task(task_id: int) -> None:
 
         # 完成任务，保存 chunk_id 到 error_message（用于返回给客户端）
         task_service.update_task_status(
-            task_id, "completed", progress=100,
-            error_message=f"CHUNK_ID:{chunk_id}"
+            task_id, "completed", progress=100, error_message=f"CHUNK_ID:{chunk_id}"
         )
 
     except Exception as e:
