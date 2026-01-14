@@ -54,6 +54,7 @@ def output_node(state: State) -> State:
         "query": state.get("query", ""),
         "cleaned_query": state.get("cleaned_query", ""),
         "tokens": state.get("tokens", []),
+        "file_ids_filter": state.get("file_ids"),      # 实际生效的文件ID过滤（None表示全局检索）
     }
 
     return {

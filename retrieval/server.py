@@ -24,7 +24,7 @@ mcp = FastMCP(
 
 @mcp.tool(
     name="resolve-keywords",
-    description="Resolves queries to relevant document keywords (doc_title). Returns up to 20 keyword candidates with confidence scores. Select keywords based on relevance to user's specific question, not solely by score ranking. Optionally filter by filenames to search within specific documents.",
+    description="Resolves queries to relevant document keywords (doc_title). Returns up to 20 keyword candidates with confidence scores. IMPORTANT: When user mentions a specific book, document, or file name (e.g., 'find in the Python book', 'from my ML notes'), you SHOULD use the filenames parameter to narrow search scope for more accurate results.",
     tags={"retrieval", "keywords"},
 )
 async def resolve_keywords_tool(
@@ -34,7 +34,7 @@ async def resolve_keywords_tool(
     ],
     filenames: Annotated[
         Optional[Union[List[str], str]],
-        Field(description="Optional list of filenames to filter search scope (fuzzy match). Example: ['深度学习'] matches '深度学习.md'. If not provided or no match found, searches all documents.")
+        Field(description="Filter search to specific files. USE THIS when user mentions a book/document name. Supports fuzzy match - no need for exact filename or extension. Example: 'machine learning' matches 'machine learning.md', 'machine learning notes.md', etc. Just extract the key name from user's query.")
     ] = None,
     max_results: Annotated[
         int,
@@ -68,10 +68,12 @@ async def resolve_keywords_tool(
 
         # 输出关键统计信息
         stats = result.get("stats", {})
+        file_ids_filter = stats.get("file_ids_filter")
         await ctx.info(
             f"[Tool 1] Stats - BM25: {stats.get('bm25_recall_count', 0)}, "
             f"Vector: {stats.get('vector_recall_count', 0)}, "
-            f"Fused: {stats.get('total_fused_results', 0)}"
+            f"Fused: {stats.get('total_fused_results', 0)}, "
+            f"FileFilter: {file_ids_filter if file_ids_filter else 'None (global)'}"
         )
 
         # 直接返回纯数据，让FastMCP自动序列化为结构化JSON
