@@ -138,7 +138,7 @@ def render_files_middle(
                         if batch_mode:
                             # 批量模式：显示复选框
                             with ui.element("div").classes(
-                                "grid items-center gap-2"
+                                "grid items-center gap-2 w-full"
                             ).style("grid-template-columns: auto auto 1fr auto"):
                                 ui.checkbox(
                                     value=is_batch_selected,
@@ -149,12 +149,13 @@ def render_files_middle(
                                 ui.label(f["filename"]).classes(
                                     "text-sm truncate theme-text"
                                 ).tooltip(f["filename"])
-                                status_badge(f["status"])
+                                with ui.element("div").classes("justify-self-end"):
+                                    status_badge(f["status"])
                         else:
                             # 普通模式：显示文件名和状态
                             with ui.column().classes("w-full gap-1"):
                                 with ui.element("div").classes(
-                                    "grid items-center gap-2"
+                                    "grid items-center gap-2 w-full"
                                 ).style("grid-template-columns: auto 1fr auto"):
                                     ui.icon("description", size="xs").classes(
                                         "theme-text-accent" if is_selected else "theme-text-muted"
@@ -162,7 +163,8 @@ def render_files_middle(
                                     ui.label(f["filename"]).classes(
                                         "text-sm truncate theme-text"
                                     ).tooltip(f["filename"])
-                                    status_badge(f["status"])
+                                    with ui.element("div").classes("justify-self-end"):
+                                        status_badge(f["status"])
 
                                 # 如果有进行中的任务，显示进度条
                                 if task_progress and task_progress["status"] in ["pending", "processing"]:

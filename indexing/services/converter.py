@@ -14,7 +14,7 @@ from markitdown import MarkItDown
 
 
 # 支持的文件格式
-SUPPORTED_FORMATS = {".md", ".pdf", ".docx", ".pptx", ".xlsx"}
+SUPPORTED_FORMATS = {".md", ".pdf", ".docx", ".pptx", ".xlsx", ".txt"}
 
 # PDF 处理限制
 MAX_PDF_PAGES = 3000  # 最大页数限制（提高到 3000 页）
@@ -158,8 +158,8 @@ def convert_to_markdown(file_path: Path) -> str:
     if suffix not in SUPPORTED_FORMATS:
         raise ValueError(f"不支持的文件格式: {suffix}")
 
-    if suffix == ".md":
-        # Markdown 文件直接读取
+    if suffix in {".md", ".txt"}:
+        # 文本类文件直接读取
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
     elif suffix == ".pdf":

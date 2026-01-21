@@ -13,6 +13,7 @@ from typing import Optional, List
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from indexing.services import file_service, task_service
+from indexing.services.chunking import ChunkerFactory
 from app.utils import MAX_FILE_SIZE
 from app.api.models import (
     UploadResponse,
@@ -39,10 +40,12 @@ async def upload_file(file: UploadFile = File(...)):
     - 创建异步处理任务
     - 返回 task_id
     """
-    # 验证文件类型
+    # 验证文件类型（与 UI 支持范围保持一致）
     filename_lower = file.filename.lower()
-    if not (filename_lower.endswith(".md") or filename_lower.endswith(".pdf")):
-        raise HTTPException(status_code=400, detail="仅支持 Markdown (.md) 和 PDF (.pdf) 文件")
+    supported_extensions = ChunkerFactory.get_supported_extensions()
+    if not any(filename_lower.endswith(ext) for ext in supported_extensions):
+        supported_str = ", ".join(supported_extensions)
+        raise HTTPException(status_code=400, detail=f"仅支持以下格式: {supported_str}")
 
     # 读取文件内容
     content = await file.read()
