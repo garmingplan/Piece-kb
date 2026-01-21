@@ -152,7 +152,7 @@ class SettingsHandlers:
         test_result_label.classes(remove="text-green-500 text-red-500", add="theme-text-muted")
 
         try:
-            from webdav3.client import Client
+            from webdav4.client import Client
             import asyncio
 
             hostname = self.settings_form.get("webdav_hostname", "").strip()
@@ -164,19 +164,16 @@ class SettingsHandlers:
                 test_result_label.classes(remove="theme-text-muted", add="text-red-500")
                 return
 
-            options = {
-                'webdav_hostname': hostname,
-                'webdav_login': username,
-                'webdav_password': password,
-            }
+            client = Client(
+                hostname,
+                auth=(username, password),
+                timeout=10.0
+            )
 
-            client = Client(options)
-
-            # 尝试列出根目录来验证连接，比 check() 更可靠
+            # 尝试列出根目录来验证连接
             def test_connection():
                 try:
-                    # list() 会抛出更详细的异常
-                    client.list("/")
+                    client.ls("/")
                     return True, None
                 except Exception as e:
                     return False, str(e)

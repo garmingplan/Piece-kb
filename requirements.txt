@@ -12,6 +12,7 @@ langgraph==0.6.8
 # 数据验证和序列化（让pip自动解析依赖）
 pydantic==2.11.7
 markitdown[all]==0.1.4
+PyMuPDF==1.26.7
 
 # HTTP客户端和嵌入模型调用
 httpx==0.28.1
