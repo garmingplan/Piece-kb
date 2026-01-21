@@ -114,7 +114,7 @@ async def get_docs_tool(
             return {
                 "documents": {},
                 "not_found": [],
-                "error": "Invalid doc_titles format, should be a list or JSON array string"
+                "error": f"Invalid doc_titles format. Expected JSON array like [\"title1\", \"title2\"], got: {repr(doc_titles)}"
             }
 
     # 限制最多3个doc_title

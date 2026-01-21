@@ -2,6 +2,7 @@
 查询预处理节点：文本清洗、格式验证、分词、文件名解析、状态初始化
 """
 import jieba
+import re
 from typing import List, Optional
 from .state import State
 from ..config import config
@@ -27,6 +28,13 @@ def tokenize_query(query: str) -> list[str]:
         for t in tokens
         if len(t.strip()) > 1 and t.strip() not in config.search.stopwords
     ]
+
+    # 清理FTS5特殊字符（移除会导致语法错误的字符）
+    fts5_special_chars = r'[."*(){}\[\]:^$|&!+\-=<>~/]'
+    tokens = [re.sub(fts5_special_chars, '', t) for t in tokens]
+
+    # 过滤清理后为空或单字符的token
+    tokens = [t for t in tokens if len(t) > 1]
 
     # 去重并按长度降序排序（优先匹配长词）
     tokens = sorted(list(set(tokens)), key=len, reverse=True)

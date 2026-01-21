@@ -283,7 +283,7 @@ def batch_remove_chunks(chunk_ids: Union[list, str]) -> dict:
             logger.error(f"[MCP Tool] batch_remove_chunks: 无效的 chunk_ids 格式: {chunk_ids}")
             return {
                 "success": False,
-                "message": f"无效的 chunk_ids 格式，应为列表或 JSON 数组字符串",
+                "message": f"无效的 chunk_ids 格式。期望 JSON 数组如 [1, 2, 3]，实际收到: {repr(chunk_ids)}",
                 "data": None
             }
 
