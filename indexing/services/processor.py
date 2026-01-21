@@ -144,22 +144,28 @@ async def process_task(task_id: int) -> None:
     5. 写入 chunks + vec_chunks
     6. 更新状态为 indexed
     """
-    task = task_service.get_task(task_id)
+    task = await asyncio.to_thread(task_service.get_task, task_id)
     if not task:
         return
 
     file_id = task.get("file_id")
     if not file_id:
-        task_service.update_task_status(
-            task_id, "failed", error_message="任务未关联文件"
+        await asyncio.to_thread(
+            task_service.update_task_status,
+            task_id,
+            "failed",
+            error_message="任务未关联文件",
         )
         return
 
     # 获取文件信息
-    file_info = file_service.get_file_by_id(file_id)
+    file_info = await asyncio.to_thread(file_service.get_file_by_id, file_id)
     if not file_info:
-        task_service.update_task_status(
-            task_id, "failed", error_message="关联文件不存在"
+        await asyncio.to_thread(
+            task_service.update_task_status,
+            task_id,
+            "failed",
+            error_message="关联文件不存在",
         )
         return
 
@@ -169,7 +175,12 @@ async def process_task(task_id: int) -> None:
 
     try:
         # 更新状态为处理中
-        task_service.update_task_status(task_id, "processing", progress=5)
+        await asyncio.to_thread(
+            task_service.update_task_status,
+            task_id,
+            "processing",
+            progress=5,
+        )
 
         # 调试日志
         import logging
@@ -211,17 +222,37 @@ async def process_task(task_id: int) -> None:
                 )
             else:
                 # 非 PDF 文件：显示转换进度
-                task_service.update_task_status(task_id, "processing", progress=10)
+                await asyncio.to_thread(
+                    task_service.update_task_status,
+                    task_id,
+                    "processing",
+                    progress=10,
+                )
                 content = await asyncio.to_thread(convert_to_markdown, original_file_path)
-                task_service.update_task_status(task_id, "processing", progress=15)
+                await asyncio.to_thread(
+                    task_service.update_task_status,
+                    task_id,
+                    "processing",
+                    progress=15,
+                )
         else:
             logger.info(f"[转换模式] 直接读取工作文件")
             # 应用内新建的文件，直接读取工作文件（异步读取）
-            task_service.update_task_status(task_id, "processing", progress=10)
+            await asyncio.to_thread(
+                task_service.update_task_status,
+                task_id,
+                "processing",
+                progress=10,
+            )
             import aiofiles
             async with aiofiles.open(working_file_path, "r", encoding="utf-8") as f:
                 content = await f.read()
-            task_service.update_task_status(task_id, "processing", progress=15)
+            await asyncio.to_thread(
+                task_service.update_task_status,
+                task_id,
+                "processing",
+                progress=15,
+            )
 
         logger.info(f"[转换后] 内容长度: {len(content)}")
 
@@ -233,7 +264,12 @@ async def process_task(task_id: int) -> None:
         logger.info(f"[处理文件] 文件名: {original_filename}, 内容长度: {len(content)}, 前100字符: {content[:100]}")
 
         # 2. 分块处理 - 使用工厂模式根据文件类型选择分块器
-        task_service.update_task_status(task_id, "processing", progress=20)
+        await asyncio.to_thread(
+            task_service.update_task_status,
+            task_id,
+            "processing",
+            progress=20,
+        )
 
         base_name = Path(original_filename).stem
 
@@ -249,32 +285,51 @@ async def process_task(task_id: int) -> None:
 
         try:
             chunker = ChunkerFactory.get_chunker(file_extension)
-            task_service.update_task_status(task_id, "processing", progress=25)
-            chunks = chunker.chunk(content, base_name)
-            task_service.update_task_status(task_id, "processing", progress=30)
+            await asyncio.to_thread(
+                task_service.update_task_status,
+                task_id,
+                "processing",
+                progress=25,
+            )
+            chunks = await asyncio.to_thread(chunker.chunk, content, base_name)
+            await asyncio.to_thread(
+                task_service.update_task_status,
+                task_id,
+                "processing",
+                progress=30,
+            )
         except ValueError as e:
             logger.error(f"[分块失败] {e}")
-            file_service.update_file_status(file_id, "error")
-            task_service.update_task_status(
-                task_id, "failed", error_message=str(e)
+            await asyncio.to_thread(file_service.update_file_status, file_id, "error")
+            await asyncio.to_thread(
+                task_service.update_task_status,
+                task_id,
+                "failed",
+                error_message=str(e),
             )
             return
 
         logger.info(f"[分块结果] 文件: {original_filename}, 分块数: {len(chunks) if chunks else 0}")
 
         if not chunks:
-            file_service.update_file_status(file_id, "error")
-            task_service.update_task_status(
-                task_id, "failed", error_message="无有效分块"
+            await asyncio.to_thread(file_service.update_file_status, file_id, "error")
+            await asyncio.to_thread(
+                task_service.update_task_status,
+                task_id,
+                "failed",
+                error_message="无有效分块",
             )
             return
 
         # 3. 生成向量
         config = get_embedding_config()
         if not config["api_key"]:
-            file_service.update_file_status(file_id, "error")
-            task_service.update_task_status(
-                task_id, "failed", error_message="未配置 EMBEDDING_API_KEY"
+            await asyncio.to_thread(file_service.update_file_status, file_id, "error")
+            await asyncio.to_thread(
+                task_service.update_task_status,
+                task_id,
+                "failed",
+                error_message="未配置 EMBEDDING_API_KEY",
             )
             return
 
@@ -335,7 +390,12 @@ async def process_task(task_id: int) -> None:
             # 更新进度 (30% - 80%)
             batch_idx = i // batch_size + 1
             progress = 30 + int(50 * batch_idx / total_batches)
-            task_service.update_task_status(task_id, "processing", progress=progress)
+            await asyncio.to_thread(
+                task_service.update_task_status,
+                task_id,
+                "processing",
+                progress=progress,
+            )
 
             # 日志记录（每 50 批次）
             if batch_idx % 50 == 0:
@@ -351,18 +411,34 @@ async def process_task(task_id: int) -> None:
         def write_progress_callback(progress: int):
             task_service.update_task_status(task_id, "processing", progress=progress)
 
-        insert_chunks_batch(file_id, chunks, embeddings_list, progress_callback=write_progress_callback)
+        await asyncio.to_thread(
+            insert_chunks_batch,
+            file_id,
+            chunks,
+            embeddings_list,
+            progress_callback=write_progress_callback
+        )
 
         # 5. 更新文件状态
-        file_service.update_file_status(file_id, "indexed")
+        await asyncio.to_thread(file_service.update_file_status, file_id, "indexed")
 
         # 6. 完成
-        task_service.update_task_status(task_id, "completed", progress=100)
+        await asyncio.to_thread(
+            task_service.update_task_status,
+            task_id,
+            "completed",
+            progress=100,
+        )
 
     except Exception as e:
         # 处理失败
-        task_service.update_task_status(task_id, "failed", error_message=str(e))
-        file_service.update_file_status(file_id, "error")
+        await asyncio.to_thread(
+            task_service.update_task_status,
+            task_id,
+            "failed",
+            error_message=str(e),
+        )
+        await asyncio.to_thread(file_service.update_file_status, file_id, "error")
 
 
 # ========== 任务队列管理 ==========
