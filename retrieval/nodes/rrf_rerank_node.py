@@ -105,12 +105,14 @@ def rrf_rerank_node(state: State) -> State:
             "error": "缺少检索结果",
         }
 
-    # 如果只有一路检索结果，直接使用
+    # 如果只有一路检索结果，也使用 RRF 公式保持分数量纲一致
+    k = config.search.rrf_k
+
     if bm25_results and not vector_results:
         fused_results = [
             {
                 "doc_title": item["doc_title"],
-                "rrf_score": item["score"],
+                "rrf_score": (1.0 / (k + i + 1)) * config.search.bm25_weight,
                 "bm25_rank": i + 1,
                 "vector_rank": None,
                 "bm25_score": item["score"],
@@ -124,7 +126,7 @@ def rrf_rerank_node(state: State) -> State:
         fused_results = [
             {
                 "doc_title": item["doc_title"],
-                "rrf_score": item["score"],
+                "rrf_score": (1.0 / (k + i + 1)) * config.search.vector_weight,
                 "bm25_rank": None,
                 "vector_rank": i + 1,
                 "bm25_score": None,

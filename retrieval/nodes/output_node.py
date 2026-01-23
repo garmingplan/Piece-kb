@@ -37,9 +37,12 @@ def output_node(state: State) -> State:
     # 提取关键词列表（doc_title）
     final_keywords: List[str] = [result["doc_title"] for result in top_k_results]
 
-    # 生成置信度分数字典
+    # 生成置信度分数字典（归一化到 0-1 范围，裁剪到 4 位小数）
+    # RRF 理论最大值 = 1 / (k + 1)，归一化后分数更直观
+    max_rrf = 1.0 / (config.search.rrf_k + 1)
     confidence_scores: Dict[str, float] = {
-        result["doc_title"]: result["rrf_score"] for result in top_k_results
+        result["doc_title"]: round(result["rrf_score"] / max_rrf, 4)
+        for result in top_k_results
     }
 
     # 生成两路检索统计信息
