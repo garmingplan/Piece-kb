@@ -1,7 +1,7 @@
 """
 工具1: resolve-database-keywords
 根据用户查询解析出相关的数据库关键词（doc_title）
-使用 LangGraph 工作流实现两路检索 + RRF 重排序
+使用 LangGraph 工作流实现三路检索 + RRF 重排序
 """
 from typing import Dict, Any, List, Optional
 from langgraph.graph import StateGraph, END
@@ -9,6 +9,7 @@ from langgraph.graph import StateGraph, END
 from ..nodes import (
     State,
     preprocess_node,
+    exact_match_node,
     vector_search_node,
     bm25_search_node,
     rrf_rerank_node,
@@ -18,14 +19,15 @@ from ..nodes import (
 
 def build_graph():
     """
-    构建LangGraph工作流（两路检索架构）
+    构建LangGraph工作流（三路检索架构）
 
     流程：
     1. preprocess_node - 查询预处理（清洗、jieba分词）
-    2. bm25_search_node + vector_search_node - 并行两路检索
+    2. exact_match_node + bm25_search_node + vector_search_node - 并行三路检索
+       - exact_match_node: doc_title字段LIKE精确匹配
        - bm25_search_node: chunk_text字段FTS5 BM25词频检索
        - vector_search_node: embedding字段sqlite-vec余弦相似度
-    3. rrf_rerank_node - RRF重排序融合（两路）
+    3. rrf_rerank_node - RRF重排序融合（三路）
     4. output_node - 结果输出格式化
 
     Returns:
@@ -36,6 +38,7 @@ def build_graph():
 
     # 添加节点
     workflow.add_node("preprocess", preprocess_node)
+    workflow.add_node("exact_match", exact_match_node)
     workflow.add_node("bm25_search", bm25_search_node)
     workflow.add_node("vector_search", vector_search_node)
     workflow.add_node("rrf_rerank", rrf_rerank_node)
@@ -44,11 +47,13 @@ def build_graph():
     # 设置入口点
     workflow.set_entry_point("preprocess")
 
-    # 添加边：preprocess -> 并行执行两路检索
+    # 添加边：preprocess -> 并行执行三路检索
+    workflow.add_edge("preprocess", "exact_match")
     workflow.add_edge("preprocess", "bm25_search")
     workflow.add_edge("preprocess", "vector_search")
 
-    # 添加边：两路检索 -> RRF重排序
+    # 添加边：三路检索 -> RRF重排序
+    workflow.add_edge("exact_match", "rrf_rerank")
     workflow.add_edge("bm25_search", "rrf_rerank")
     workflow.add_edge("vector_search", "rrf_rerank")
 
@@ -67,7 +72,7 @@ async def resolve_database_keywords(
     filenames: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
-    根据查询解析数据库关键词（两路检索架构）
+    根据查询解析数据库关键词（三路检索架构）
 
     Args:
         query: 用户查询文本
@@ -76,11 +81,13 @@ async def resolve_database_keywords(
     Returns:
         {
             "keywords": ["doc_title_1", "doc_title_2", ...],  # 精选的关键词列表
+            "title_matches": ["doc_title_1", ...],            # 标题检索路径命中的关键词
             "confidence_scores": {"doc_title_1": 0.95, ...},  # 置信度分数
             "stats": {  # 检索统计信息
                 "query": "原始查询",
                 "cleaned_query": "清洗后查询",
                 "tokens": ["分词1", "分词2"],
+                "exact_recall_count": 5,     # 标题检索召回数
                 "bm25_recall_count": 10,     # BM25检索召回数
                 "vector_recall_count": 10,   # 向量检索召回数
                 "total_fused_results": 20,   # RRF融合后总数
@@ -91,7 +98,7 @@ async def resolve_database_keywords(
     # 构建工作流
     graph = build_graph()
 
-    # 初始化状态（两路检索架构）
+    # 初始化状态（三路检索架构）
     initial_state: State = {
         "query": query,
         "filenames": filenames,  # 可选的文件名过滤
@@ -99,10 +106,12 @@ async def resolve_database_keywords(
         "tokens": None,
         "file_ids": None,  # 由 preprocess_node 解析
         "query_embedding": None,
+        "exact_results": None,    # 精确匹配检索结果
         "bm25_results": None,     # chunk_text BM25检索结果
         "vector_results": None,   # embedding向量检索结果
         "fused_results": None,
         "final_keywords": None,
+        "title_matches": None,
         "confidence_scores": None,
         "stats": None,
         "error": None,
@@ -123,6 +132,7 @@ async def resolve_database_keywords(
     # 返回结果
     return {
         "keywords": final_state.get("final_keywords", []),
+        "title_matches": final_state.get("title_matches", []),
         "confidence_scores": final_state.get("confidence_scores", {}),
         "stats": stats,
     }

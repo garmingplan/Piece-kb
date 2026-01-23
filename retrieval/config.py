@@ -17,15 +17,19 @@ from indexing.settings import (
 
 
 class SearchConfig(BaseModel):
-    """检索参数配置（两路检索架构）"""
+    """检索参数配置（三路检索架构）"""
+
+    # 精确匹配参数（doc_title LIKE 检索）
+    exact_top_k: int = 10
+    exact_weight: float = 0.4
 
     # BM25检索参数（chunk_text FTS5检索）
     bm25_top_k: int = 10
-    bm25_weight: float = 0.5
+    bm25_weight: float = 0.3
 
     # 向量检索参数（embedding sqlite-vec余弦相似度）
     vector_top_k: int = 10
-    vector_weight: float = 0.5
+    vector_weight: float = 0.3
 
     # RRF重排序参数
     rrf_k: int = 60

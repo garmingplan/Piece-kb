@@ -12,7 +12,7 @@ class SearchResult(TypedDict):
 
 
 class State(TypedDict):
-    """LangGraph工作流状态 - 两路检索架构"""
+    """LangGraph工作流状态 - 三路检索架构"""
     # 输入
     query: str  # 用户查询文本
     filenames: Optional[List[str]]  # 限定检索的文件名列表（可选，模糊匹配）
@@ -25,15 +25,17 @@ class State(TypedDict):
     # 向量化
     query_embedding: Optional[List[float]]  # 查询向量
 
-    # 两路检索结果（使用Annotated处理并行更新）
+    # 三路检索结果（使用Annotated处理并行更新）
+    exact_results: Annotated[Optional[List[SearchResult]], lambda x, y: y if y is not None else x]  # 精确匹配结果（doc_title LIKE）
     bm25_results: Annotated[Optional[List[SearchResult]], lambda x, y: y if y is not None else x]  # BM25检索结果（chunk_text词频）
     vector_results: Annotated[Optional[List[SearchResult]], lambda x, y: y if y is not None else x]  # 向量检索结果（embedding余弦相似度）
 
     # 重排序结果
-    fused_results: Optional[List[Dict[str, Any]]]  # RRF融合后的结果（两路）
+    fused_results: Optional[List[Dict[str, Any]]]  # RRF融合后的结果（三路）
 
     # 最终输出
     final_keywords: Optional[List[str]]  # 最终关键词列表（doc_title）
+    title_matches: Optional[List[str]]  # 标题检索路径命中的 doc_title 列表
     confidence_scores: Optional[Dict[str, float]]  # 置信度分数
     stats: Optional[Dict[str, Any]]  # 检索统计信息
 

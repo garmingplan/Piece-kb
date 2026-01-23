@@ -1,7 +1,7 @@
 """
 SQLite检索MCP服务 - 主入口文件
 基于FastMCP实现的智能知识检索服务，提供两个核心工具：
-1. resolve-keywords: 智能关键词解析（两路检索+RRF重排，返回20个关键词）
+1. resolve-keywords: 智能关键词解析（三路检索+RRF重排，返回20个关键词）
 2. get-docs: 精确文档获取（最多接受3个关键词）
 """
 
@@ -69,10 +69,13 @@ async def resolve_keywords_tool(
         # 输出关键统计信息
         stats = result.get("stats", {})
         file_ids_filter = stats.get("file_ids_filter")
+        title_matches = result.get("title_matches", [])
         await ctx.info(
-            f"[Tool 1] Stats - BM25: {stats.get('bm25_recall_count', 0)}, "
+            f"[Tool 1] Stats - Title: {stats.get('exact_recall_count', 0)}, "
+            f"BM25: {stats.get('bm25_recall_count', 0)}, "
             f"Vector: {stats.get('vector_recall_count', 0)}, "
             f"Fused: {stats.get('total_fused_results', 0)}, "
+            f"TitleMatches: {len(title_matches)}, "
             f"FileFilter: {file_ids_filter if file_ids_filter else 'None (global)'}"
         )
 
