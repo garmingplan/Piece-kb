@@ -3,10 +3,12 @@
 """
 import struct
 from typing import List
-from langchain_openai import OpenAIEmbeddings
 from .state import State, SearchResult
 from ..db import get_db_cursor
-from ..config import config, get_embedding_config
+from ..config import config
+
+# 使用统一的 embedding 客户端（单例模式，复用连接）
+from indexing.services import get_embeddings_model
 
 
 def serialize_float32(vector: List[float]) -> bytes:
@@ -44,9 +46,8 @@ def vector_search_node(state: State) -> dict:
     file_ids = state.get("file_ids")
 
     try:
-        # 初始化嵌入模型
-        embedding_config = get_embedding_config()
-        embeddings = OpenAIEmbeddings(**embedding_config)
+        # 获取 embedding 实例（单例，复用连接）
+        embeddings = get_embeddings_model()
 
         # 向量化查询
         query_embedding = embeddings.embed_query(cleaned_query)

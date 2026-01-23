@@ -130,30 +130,23 @@ def setup():
         logger.info("[Shutdown] 应用已安全关闭")
     app.on_shutdown(log_shutdown_complete)
 
-    # 在 UI 启动完成后延迟启动 MCP 服务
-    async def delayed_start_mcp_services():
-        """延迟启动 MCP 服务，确保 UI 先完全加载"""
-        await asyncio.sleep(3.0)  # UI 完全启动后延迟 3 秒
+    # 启动 MCP 服务（后台线程）
+    if _is_main_process:
+        retrieval_mcp_thread = threading.Thread(
+            target=start_mcp_server,
+            daemon=True,
+            name="RetrievalMCP"
+        )
+        retrieval_mcp_thread.start()
 
-        # 在后台线程启动 MCP 服务
-        if _is_main_process:
-            retrieval_mcp_thread = threading.Thread(
-                target=start_mcp_server,
-                daemon=True,
-                name="RetrievalMCP"
-            )
-            retrieval_mcp_thread.start()
+        index_mcp_thread = threading.Thread(
+            target=start_index_mcp_server,
+            daemon=True,
+            name="IndexMCP"
+        )
+        index_mcp_thread.start()
 
-            index_mcp_thread = threading.Thread(
-                target=start_index_mcp_server,
-                daemon=True,
-                name="IndexMCP"
-            )
-            index_mcp_thread.start()
-
-            logger.info("[App] MCP 服务已在 UI 启动后启动")
-
-    app.on_startup(lambda: asyncio.create_task(delayed_start_mcp_services()))
+        logger.info("[App] MCP 服务已启动")
 
     # 注册 API 路由
     register_routes(app)

@@ -8,6 +8,11 @@ from . import chunk_service
 from . import converter
 from . import chunking
 from .processor import processor, TaskProcessor
+from .embedding_client import (
+    get_embeddings_model,
+    get_embeddings_model_with_config,
+    refresh_embeddings_instance,
+)
 
 __all__ = [
     "file_service",
@@ -17,4 +22,7 @@ __all__ = [
     "chunking",
     "processor",
     "TaskProcessor",
+    "get_embeddings_model",
+    "get_embeddings_model_with_config",
+    "refresh_embeddings_instance",
 ]

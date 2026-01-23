@@ -11,14 +11,12 @@ import asyncio
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from langchain_openai import OpenAIEmbeddings
-
 from ..database import get_db_cursor
-from ..settings import get_embedding_config
 from ..utils import serialize_float32
 from . import task_service
 from . import file_service
 from .rate_limiter import get_rate_limiter
+from .embedding_client import get_embeddings_model
 from ..repositories import ChunkRepository, FileRepository
 
 import logging
@@ -340,22 +338,14 @@ async def process_chunk_update_task(task_id: int) -> None:
 
         task_service.update_task_status(task_id, "processing", progress=10)
 
-        # 获取 embedding 配置
-        config = get_embedding_config()
-        if not config["api_key"]:
-            task_service.update_task_status(
-                task_id, "failed", error_message="未配置 API Key"
-            )
-            return
-
         task_service.update_task_status(task_id, "processing", progress=30)
 
         # 请求速率许可
         rate_limiter = get_rate_limiter()
         await rate_limiter.acquire(1)
 
-        # 生成新的 embedding
-        embeddings_model = OpenAIEmbeddings(**config)
+        # 获取 embedding 实例（单例，复用连接）
+        embeddings_model = get_embeddings_model()
         embedding = await asyncio.to_thread(
             embeddings_model.embed_documents, [chunk_text]
         )
@@ -442,22 +432,14 @@ async def process_chunk_add_task(task_id: int) -> None:
 
         task_service.update_task_status(task_id, "processing", progress=10)
 
-        # 获取 embedding 配置
-        config = get_embedding_config()
-        if not config["api_key"]:
-            task_service.update_task_status(
-                task_id, "failed", error_message="未配置 API Key"
-            )
-            return
-
         task_service.update_task_status(task_id, "processing", progress=30)
 
         # 请求速率许可
         rate_limiter = get_rate_limiter()
         await rate_limiter.acquire(1)
 
-        # 生成 embedding
-        embeddings_model = OpenAIEmbeddings(**config)
+        # 获取 embedding 实例（单例，复用连接）
+        embeddings_model = get_embeddings_model()
         embedding = await asyncio.to_thread(
             embeddings_model.embed_documents, [chunk_text]
         )

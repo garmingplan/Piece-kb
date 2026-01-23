@@ -12,6 +12,7 @@ from indexing.settings import (
     get_settings, save_settings, reload_settings,
     AppSettings, EmbeddingSettings, McpSettings, AppearanceSettings, WebDAVSettings
 )
+from indexing.services import refresh_embeddings_instance
 from app.i18n import t, set_language
 
 
@@ -88,6 +89,15 @@ class SettingsHandlers:
                 if old_settings.appearance.language != new_settings.appearance.language:
                     set_language(self.settings_form["language"])
 
+                # 检测 embedding 配置变更，刷新实例缓存
+                embedding_changed = (
+                    old_settings.embedding.base_url != new_settings.embedding.base_url
+                    or old_settings.embedding.api_key != new_settings.embedding.api_key
+                    or old_settings.embedding.model != new_settings.embedding.model
+                )
+                if embedding_changed:
+                    refresh_embeddings_instance()
+
                 # 根据情况显示不同提示
                 if needs_restart:
                     restart_items = "、".join(needs_restart)
@@ -110,14 +120,14 @@ class SettingsHandlers:
         test_result_label.set_text(t("settings_embedding.testing"))
 
         try:
-            from langchain_openai import OpenAIEmbeddings
             import asyncio
+            from indexing.services import get_embeddings_model_with_config
 
-            embeddings = OpenAIEmbeddings(
+            # 使用表单配置创建临时实例（不缓存）
+            embeddings = get_embeddings_model_with_config(
                 base_url=self.settings_form["base_url"],
                 api_key=self.settings_form["api_key"],
                 model=self.settings_form["model"],
-                check_embedding_ctx_length=False,
             )
 
             result = await asyncio.to_thread(

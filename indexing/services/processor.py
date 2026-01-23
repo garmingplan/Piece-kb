@@ -11,8 +11,6 @@ import asyncio
 from pathlib import Path
 from typing import List, Dict, Optional
 
-from langchain_openai import OpenAIEmbeddings
-
 from ..database import get_db_cursor
 from ..settings import get_embedding_config
 from ..utils import serialize_float32
@@ -20,13 +18,14 @@ from . import task_service, file_service, chunk_service
 from .converter import convert_to_markdown
 from .chunking import ChunkerFactory
 from .rate_limiter import get_rate_limiter
+from .embedding_client import get_embeddings_model
 
 
 # ========== 向量生成 ==========
 
 
 async def generate_embeddings(
-    texts: List[str], embeddings_model: OpenAIEmbeddings, batch_size: int = 20
+    texts: List[str], embeddings_model, batch_size: int = 20
 ) -> List[List[float]]:
     """
     批量生成嵌入向量
@@ -333,7 +332,8 @@ async def process_task(task_id: int) -> None:
             )
             return
 
-        embeddings_model = OpenAIEmbeddings(**config)
+        # 获取 embedding 实例（单例，复用连接）
+        embeddings_model = get_embeddings_model()
         texts = [chunk["chunk_text"] for chunk in chunks]
 
         # 获取速率限制器
