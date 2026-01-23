@@ -81,17 +81,19 @@ async def resolve_database_keywords(
     Returns:
         {
             "keywords": ["doc_title_1", "doc_title_2", ...],  # 精选的关键词列表
-            "title_matches": ["doc_title_1", ...],            # 标题检索路径命中的关键词
             "confidence_scores": {"doc_title_1": 0.95, ...},  # 置信度分数
-            "stats": {  # 检索统计信息
+            "stats": {  # 精简的统计信息
+                "total_fused_results": 20,   # RRF融合后总数
+                "final_top_k": 20,           # 最终返回数量
+            },
+            "debug_stats": {  # 调试信息（不返回给 AI 客户端）
                 "query": "原始查询",
                 "cleaned_query": "清洗后查询",
                 "tokens": ["分词1", "分词2"],
-                "exact_recall_count": 5,     # 标题检索召回数
-                "bm25_recall_count": 10,     # BM25检索召回数
-                "vector_recall_count": 10,   # 向量检索召回数
-                "total_fused_results": 20,   # RRF融合后总数
-                "file_filter": ["文件名1", ...]  # 文件过滤条件（如有）
+                "exact_recall_count": 5,
+                "bm25_recall_count": 10,
+                "vector_recall_count": 10,
+                "file_ids_filter": [1, 2],
             }
         }
     """
@@ -111,9 +113,9 @@ async def resolve_database_keywords(
         "vector_results": None,   # embedding向量检索结果
         "fused_results": None,
         "final_keywords": None,
-        "title_matches": None,
         "confidence_scores": None,
         "stats": None,
+        "debug_stats": None,
         "error": None,
     }
 
@@ -124,15 +126,10 @@ async def resolve_database_keywords(
     if final_state.get("error"):
         raise Exception(final_state["error"])
 
-    # 获取统计信息并添加文件过滤信息
-    stats = final_state.get("stats", {})
-    if filenames:
-        stats["file_filter"] = filenames
-
-    # 返回结果
+    # 返回结果（精简版，调试信息由 server.py 通过 ctx.info() 输出）
     return {
         "keywords": final_state.get("final_keywords", []),
-        "title_matches": final_state.get("title_matches", []),
         "confidence_scores": final_state.get("confidence_scores", {}),
-        "stats": stats,
+        "stats": final_state.get("stats", {}),
+        "debug_stats": final_state.get("debug_stats", {}),  # 调试信息，由 server.py 处理
     }

@@ -66,20 +66,23 @@ async def resolve_keywords_tool(
 
         await ctx.info(f"[Tool 1] Resolved {len(keywords)} keywords")
 
-        # 输出关键统计信息
-        stats = result.get("stats", {})
-        file_ids_filter = stats.get("file_ids_filter")
-        title_matches = result.get("title_matches", [])
+        # 通过 ctx.info() 输出调试信息（不返回给 AI 客户端）
+        debug_stats = result.pop("debug_stats", {})
+        file_ids_filter = debug_stats.get("file_ids_filter")
         await ctx.info(
-            f"[Tool 1] Stats - Title: {stats.get('exact_recall_count', 0)}, "
-            f"BM25: {stats.get('bm25_recall_count', 0)}, "
-            f"Vector: {stats.get('vector_recall_count', 0)}, "
-            f"Fused: {stats.get('total_fused_results', 0)}, "
-            f"TitleMatches: {len(title_matches)}, "
+            f"[Tool 1] Debug - Query: {debug_stats.get('query', '')}, "
+            f"Cleaned: {debug_stats.get('cleaned_query', '')}, "
+            f"Tokens: {debug_stats.get('tokens', [])}"
+        )
+        await ctx.info(
+            f"[Tool 1] Stats - Title: {debug_stats.get('exact_recall_count', 0)}, "
+            f"BM25: {debug_stats.get('bm25_recall_count', 0)}, "
+            f"Vector: {debug_stats.get('vector_recall_count', 0)}, "
+            f"Fused: {result.get('stats', {}).get('total_fused_results', 0)}, "
             f"FileFilter: {file_ids_filter if file_ids_filter else 'None (global)'}"
         )
 
-        # 直接返回纯数据，让FastMCP自动序列化为结构化JSON
+        # 返回精简结果（不包含 debug_stats）
         return result
 
     except Exception as e:

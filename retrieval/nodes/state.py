@@ -35,9 +35,9 @@ class State(TypedDict):
 
     # 最终输出
     final_keywords: Optional[List[str]]  # 最终关键词列表（doc_title）
-    title_matches: Optional[List[str]]  # 标题检索路径命中的 doc_title 列表
     confidence_scores: Optional[Dict[str, float]]  # 置信度分数
-    stats: Optional[Dict[str, Any]]  # 检索统计信息
+    stats: Optional[Dict[str, Any]]  # 精简的统计信息（返回给 AI 客户端）
+    debug_stats: Optional[Dict[str, Any]]  # 调试信息（不返回给 AI 客户端）
 
     # 错误信息
     error: Annotated[Optional[str], lambda x, y: y if y is not None else x]  # 错误信息
