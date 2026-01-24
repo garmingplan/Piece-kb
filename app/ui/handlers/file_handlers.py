@@ -8,6 +8,8 @@
 - 统计信息加载
 """
 
+import asyncio
+
 from nicegui import ui, events
 
 from indexing.services import file_service, task_service
@@ -76,8 +78,6 @@ class FileHandlers:
 
     async def load_chunks(self, file_id: int):
         """加载选中文件的切片（异步 + 后端分页）"""
-        import asyncio
-
         # 1. 立即更新选中状态
         self.state["selected_file_id"] = file_id
 
@@ -146,9 +146,9 @@ class FileHandlers:
             ui.notify(t("files.upload_too_large", size=f"{size_mb:.1f}"), type="negative")
             return
 
-        # 检查重复
-        file_hash = file_service.calculate_file_hash(content)
-        existing_id = file_service.check_file_hash_exists(file_hash)
+        # 检查重复（大文件哈希计算放到线程中）
+        file_hash = await asyncio.to_thread(file_service.calculate_file_hash, content)
+        existing_id = await asyncio.to_thread(file_service.check_file_hash_exists, file_hash)
         if existing_id:
             ui.notify(t("files.upload_exists"), type="warning")
             return
@@ -156,7 +156,8 @@ class FileHandlers:
         # 保存文件
         save_result = await file_service.save_file(filename, content)
 
-        file_id = file_service.insert_file_record(
+        file_id = await asyncio.to_thread(
+            file_service.insert_file_record,
             file_hash=save_result["file_hash"],
             filename=save_result["filename"],
             file_path=save_result["file_path"],
@@ -166,8 +167,8 @@ class FileHandlers:
             status="pending"
         )
 
-        task_id = task_service.create_task(save_result["filename"])
-        task_service.update_task_status(task_id, "pending", file_id=file_id)
+        task_id = await asyncio.to_thread(task_service.create_task, save_result["filename"])
+        await asyncio.to_thread(task_service.update_task_status, task_id, "pending", file_id=file_id)
 
         ui.notify(t("files.upload_processing"), type="positive")
         self.load_files()
@@ -178,13 +179,15 @@ class FileHandlers:
         """处理被拒绝的文件（格式不符）"""
         ui.notify(t("files.upload_only_md"), type="negative")
 
-    def delete_selected_file(self):
+    async def delete_selected_file(self):
         """删除选中的文件"""
         if self.state["selected_file_id"] is None:
             ui.notify(t("files.select_first"), type="warning")
             return
 
-        file_info = file_service.get_file_by_id(self.state["selected_file_id"])
+        file_info = await asyncio.to_thread(
+            file_service.get_file_by_id, self.state["selected_file_id"]
+        )
         filename = file_info["filename"] if file_info else ""
 
         confirm_dialog(
@@ -195,9 +198,11 @@ class FileHandlers:
             danger=True,
         )
 
-    def _do_delete_file(self):
+    async def _do_delete_file(self):
         """执行删除文件"""
-        success = file_service.delete_file(self.state["selected_file_id"])
+        success = await asyncio.to_thread(
+            file_service.delete_file, self.state["selected_file_id"]
+        )
         if success:
             ui.notify(t("files.deleted"), type="positive")
             self.state["selected_file_id"] = None
@@ -215,14 +220,14 @@ class FileHandlers:
             on_create=self._do_create_file,
         )
 
-    def _do_create_file(self, filename: str):
+    async def _do_create_file(self, filename: str):
         """执行创建文件"""
         if not filename or not filename.strip():
             ui.notify(t("files.create_name_empty"), type="warning")
             return
 
         try:
-            result = file_service.create_empty_file(filename)
+            result = await asyncio.to_thread(file_service.create_empty_file, filename)
             ui.notify(t("files.created", filename=result["filename"]), type="positive")
 
             # 刷新文件列表
@@ -230,7 +235,7 @@ class FileHandlers:
             self.load_stats()
 
             # 自动选中新创建的文件
-            self.load_chunks(result["file_id"])
+            await self.load_chunks(result["file_id"])
 
         except ValueError as e:
             ui.notify(str(e), type="negative")
@@ -306,8 +311,6 @@ class FileHandlers:
 
     async def _do_batch_delete(self):
         """执行批量删除（异步优化，避免阻塞界面）"""
-        import asyncio
-
         deleted_count = 0
         ids_to_delete = list(self.state["batch_selected_ids"])
 
@@ -347,7 +350,6 @@ class FileHandlers:
             新创建的任务数量
         """
         import logging
-        import asyncio
         import aiofiles
         from pathlib import Path
 

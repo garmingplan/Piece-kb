@@ -7,6 +7,8 @@
 - 任务完成后刷新 UI
 """
 
+import asyncio
+
 from nicegui import ui
 
 from indexing.services import task_service, file_service
@@ -80,8 +82,6 @@ class TaskHandlers:
         if not self.pending_tasks:
             return
 
-        import asyncio
-
         completed_tasks = []
         progress_updated = False
 
@@ -139,8 +139,6 @@ class TaskHandlers:
 
     async def _refresh_all_async(self):
         """刷新所有数据和 UI（异步优化，避免阻塞界面）"""
-        import asyncio
-
         # 异步获取文件列表
         self.state["files_data"] = await asyncio.to_thread(file_service.get_files_list)
 

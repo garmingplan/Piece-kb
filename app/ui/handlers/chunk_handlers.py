@@ -7,9 +7,11 @@
 - 切片新增
 """
 
+import asyncio
+
 from nicegui import ui
 
-from indexing.services import chunk_service
+from indexing.services import chunk_service, file_service
 from app.i18n import t
 from app.ui.components import chunk_edit_dialog, chunk_add_dialog, confirm_dialog
 
@@ -35,9 +37,9 @@ class ChunkHandlers:
         self.state["chunk_batch_mode"] = False
         self.state["chunk_batch_selected_ids"] = set()
 
-    def handle_edit_chunk(self, chunk_id: int):
+    async def handle_edit_chunk(self, chunk_id: int):
         """打开编辑切片对话框"""
-        chunk = chunk_service.get_chunk_by_id(chunk_id)
+        chunk = await asyncio.to_thread(chunk_service.get_chunk_by_id, chunk_id)
         if not chunk:
             ui.notify(t("chunks.not_found"), type="negative")
             return
@@ -50,9 +52,9 @@ class ChunkHandlers:
             on_close=lambda: None,
         )
 
-    def _save_chunk_edit(self, chunk_id: int, new_title: str, new_text: str):
+    async def _save_chunk_edit(self, chunk_id: int, new_title: str, new_text: str):
         """保存切片编辑"""
-        chunk = chunk_service.get_chunk_by_id(chunk_id)
+        chunk = await asyncio.to_thread(chunk_service.get_chunk_by_id, chunk_id)
         if not chunk:
             ui.notify(t("chunks.not_found"), type="negative")
             return
@@ -65,16 +67,18 @@ class ChunkHandlers:
             return
 
         if title_changed:
-            chunk_service.update_chunk_title(chunk_id, new_title)
+            await asyncio.to_thread(chunk_service.update_chunk_title, chunk_id, new_title)
 
         if text_changed:
-            task_id = chunk_service.create_chunk_update_task(chunk_id, new_text)
+            task_id = await asyncio.to_thread(
+                chunk_service.create_chunk_update_task, chunk_id, new_text
+            )
             ui.notify(t("chunks.update_task_created"), type="positive")
             self.on_task_created(task_id)
         elif title_changed:
             ui.notify(t("chunks.title_updated"), type="positive")
 
-        self._reload_chunks()
+        await self._reload_chunks()
 
     def handle_delete_chunk(self, chunk_id: int):
         """确认删除切片"""
@@ -86,9 +90,9 @@ class ChunkHandlers:
             danger=True,
         )
 
-    def _do_delete_chunk(self, chunk_id: int):
+    async def _do_delete_chunk(self, chunk_id: int):
         """执行删除切片"""
-        result = chunk_service.delete_chunk(chunk_id)
+        result = await asyncio.to_thread(chunk_service.delete_chunk, chunk_id)
         if result["success"]:
             if result.get("file_deleted"):
                 ui.notify(t("chunks.last_chunk_deleted"), type="positive")
@@ -99,7 +103,7 @@ class ChunkHandlers:
                     self.ui_refs["chunk_inspector"].refresh()
             else:
                 ui.notify(t("chunks.deleted"), type="positive")
-                self._reload_chunks()
+                await self._reload_chunks()
         else:
             ui.notify(result.get("error", t("chunks.delete_failed")), type="negative")
 
@@ -115,13 +119,14 @@ class ChunkHandlers:
             on_close=lambda: None,
         )
 
-    def _save_new_chunk(self, file_id: int, doc_title: str, chunk_text: str):
+    async def _save_new_chunk(self, file_id: int, doc_title: str, chunk_text: str):
         """保存新增切片"""
         if not doc_title.strip() or not chunk_text.strip():
             ui.notify(t("chunks.title_content_required"), type="warning")
             return
 
-        task_id = chunk_service.create_chunk_add_task(
+        task_id = await asyncio.to_thread(
+            chunk_service.create_chunk_add_task,
             file_id=file_id,
             doc_title=doc_title.strip(),
             chunk_text=chunk_text.strip(),
@@ -132,9 +137,6 @@ class ChunkHandlers:
 
     async def _reload_chunks(self):
         """重新加载当前文件的切片（异步 + 后端分页）"""
-        import asyncio
-        from indexing.services import file_service
-
         if self.state["selected_file_id"]:
             # 异步加载第一页数据
             result = await asyncio.to_thread(
@@ -164,9 +166,6 @@ class ChunkHandlers:
 
     async def go_to_chunk_page(self, page: int):
         """跳转到指定页（异步加载）"""
-        import asyncio
-        from indexing.services import file_service
-
         total_pages = self.get_total_chunk_pages()
         if page < 1:
             page = 1
@@ -275,19 +274,20 @@ class ChunkHandlers:
         visible_chunk_ids = {c["id"] for c in visible_chunks}
         return visible_chunk_ids.issubset(self.state["chunk_batch_selected_ids"])
 
-    def confirm_chunk_batch_delete(self):
+    async def confirm_chunk_batch_delete(self):
         """确认批量删除切片"""
         if not self.state["chunk_batch_selected_ids"]:
             ui.notify(t("chunks.batch_none_selected"), type="warning")
             return
 
         count = len(self.state["chunk_batch_selected_ids"])
-        total_chunks = len(self.state["chunks_data"])
+        total_chunks = self.state.get("total_chunks", len(self.state["chunks_data"]))
 
         # 如果选中了所有切片，使用删除文件的警告
-        if count == total_chunks:
-            from indexing.services import file_service
-            file_info = file_service.get_file_by_id(self.state["selected_file_id"])
+        if count >= total_chunks:
+            file_info = await asyncio.to_thread(
+                file_service.get_file_by_id, self.state["selected_file_id"]
+            )
             filename = file_info["filename"] if file_info else ""
             confirm_dialog(
                 title=t("files.delete_confirm_title"),
@@ -305,18 +305,17 @@ class ChunkHandlers:
                 danger=True,
             )
 
-    def _do_chunk_batch_delete(self):
+    async def _do_chunk_batch_delete(self):
         """执行批量删除切片"""
-        deleted_count = 0
-        file_deleted = False
         ids_to_delete = list(self.state["chunk_batch_selected_ids"])
 
-        for chunk_id in ids_to_delete:
-            result = chunk_service.delete_chunk(chunk_id)
-            if result["success"]:
-                deleted_count += 1
-                if result.get("file_deleted"):
-                    file_deleted = True
+        # 使用批量删除服务（一次性处理，避免循环阻塞）
+        result = await asyncio.to_thread(
+            chunk_service.batch_delete_chunks, ids_to_delete
+        )
+
+        deleted_count = result["deleted_count"]
+        file_deleted = len(result["deleted_files"]) > 0
 
         if file_deleted:
             self.state["selected_file_id"] = None
@@ -328,7 +327,7 @@ class ChunkHandlers:
         self.state["chunk_batch_selected_ids"] = set()
 
         if not file_deleted:
-            self._reload_chunks()
+            await self._reload_chunks()
 
         if self.ui_refs.get("chunk_toolbar_buttons"):
             self.ui_refs["chunk_toolbar_buttons"].refresh()

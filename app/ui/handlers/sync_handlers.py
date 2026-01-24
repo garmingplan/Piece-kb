@@ -6,7 +6,9 @@
 - 管理同步状态和日志
 """
 
+import asyncio
 from datetime import datetime
+
 from nicegui import ui
 
 from indexing.services.sync_service import get_sync_service
@@ -95,8 +97,6 @@ class SyncHandlers:
         self._add_log("info", t("cloud_sync.sync_started"))
 
         try:
-            import asyncio
-
             def progress_callback(current, total, filename):
                 self._add_log("info", f"[{current}/{total}] {filename}")
 

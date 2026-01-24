@@ -6,6 +6,8 @@
 - 保存设置
 """
 
+import asyncio
+
 from nicegui import ui
 
 from indexing.settings import (
@@ -120,7 +122,6 @@ class SettingsHandlers:
         test_result_label.set_text(t("settings_embedding.testing"))
 
         try:
-            import asyncio
             from indexing.services import get_embeddings_model_with_config
 
             # 使用表单配置创建临时实例（不缓存）
@@ -166,7 +167,6 @@ class SettingsHandlers:
 
         try:
             from webdav4.client import Client
-            import asyncio
 
             hostname = self.settings_form.get("webdav_hostname", "").strip()
             username = self.settings_form.get("webdav_username", "").strip()
