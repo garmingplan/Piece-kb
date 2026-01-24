@@ -124,10 +124,13 @@ class SettingsHandlers:
             from indexing.services import get_embeddings_model_with_config
 
             # 使用表单配置创建临时实例（不缓存）
-            embeddings = get_embeddings_model_with_config(
-                base_url=self.settings_form["base_url"],
-                api_key=self.settings_form["api_key"],
-                model=self.settings_form["model"],
+            # 将实例化放到线程中，避免首次创建时阻塞事件循环
+            embeddings = await asyncio.to_thread(
+                lambda: get_embeddings_model_with_config(
+                    base_url=self.settings_form["base_url"],
+                    api_key=self.settings_form["api_key"],
+                    model=self.settings_form["model"],
+                )
             )
 
             result = await asyncio.to_thread(
