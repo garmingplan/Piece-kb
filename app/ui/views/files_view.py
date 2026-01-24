@@ -240,7 +240,7 @@ def render_files_right(
             chunk_toolbar_buttons()
 
         # 切片内容区
-        with ui.scroll_area().classes("flex-1 p-4 min-w-0"):
+        with ui.scroll_area().classes("flex-1 px-2 py-1 min-w-0"):
             @ui.refreshable
             def chunk_inspector():
                 if state["selected_file_id"] is None:

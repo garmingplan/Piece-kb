@@ -43,8 +43,8 @@ def chunk_card(
         on_edit: 编辑回调函数，传入 chunk_id
         on_delete: 删除回调函数，传入 chunk_id
     """
-    with ui.card().props("flat bordered").classes("w-full mb-3 theme-card overflow-hidden").style("border: 1px solid var(--border-color)"):
-        with ui.card_section().classes("py-3 px-4 min-w-0"):
+    with ui.card().props("flat bordered").classes("w-full mb-2 theme-card overflow-hidden").style("border: 1px solid var(--border-color)"):
+        with ui.card_section().classes("py-2 px-3 min-w-0"):
             # 标题行：标题 + 操作按钮 + 序号
             with ui.row().classes("items-center justify-between mb-2"):
                 ui.label(doc_title).classes("font-semibold text-base theme-text-accent")
