@@ -12,7 +12,8 @@ from nicegui import ui
 
 from indexing.settings import (
     get_settings, save_settings, reload_settings,
-    AppSettings, EmbeddingSettings, McpSettings, AppearanceSettings, WebDAVSettings
+    AppSettings, EmbeddingSettings, McpSettings, AppearanceSettings, WebDAVSettings,
+    generate_api_key
 )
 from indexing.services import refresh_embeddings_instance
 from app.i18n import t, set_language
@@ -41,6 +42,8 @@ class SettingsHandlers:
             "vector_dim": settings.embedding.vector_dim,
             "max_tokens": settings.embedding.max_tokens,
             "mcp_port": settings.mcp.port,
+            "mcp_api_key": settings.mcp.api_key,
+            "mcp_auth_enabled": settings.mcp.auth_enabled,
             "data_path": settings.data_path,
             "theme": settings.appearance.theme,
             "language": settings.appearance.language,
@@ -63,7 +66,11 @@ class SettingsHandlers:
                     vector_dim=int(self.settings_form["vector_dim"]),
                     max_tokens=int(self.settings_form.get("max_tokens", 8192)),
                 ),
-                mcp=McpSettings(port=int(self.settings_form["mcp_port"])),
+                mcp=McpSettings(
+                    port=int(self.settings_form["mcp_port"]),
+                    api_key=self.settings_form.get("mcp_api_key", ""),
+                    auth_enabled=self.settings_form.get("mcp_auth_enabled", True),
+                ),
                 appearance=AppearanceSettings(
                     theme=self.settings_form["theme"],
                     language=self.settings_form["language"],
@@ -83,6 +90,14 @@ class SettingsHandlers:
 
                 if old_settings.mcp.port != new_settings.mcp.port:
                     needs_restart.append("MCP端口")
+
+                # MCP 认证配置变化需要重启
+                mcp_auth_changed = (
+                    old_settings.mcp.api_key != new_settings.mcp.api_key
+                    or old_settings.mcp.auth_enabled != new_settings.mcp.auth_enabled
+                )
+                if mcp_auth_changed:
+                    needs_restart.append("MCP密钥")
 
                 if old_settings.data_path != new_settings.data_path:
                     needs_restart.append("数据路径")
@@ -211,3 +226,15 @@ class SettingsHandlers:
             test_result_label.classes(remove="theme-text-muted", add="text-red-500")
         finally:
             test_btn.props(remove="loading")
+
+    def regenerate_mcp_api_key(self, api_key_input):
+        """
+        重新生成 MCP API 密钥
+
+        Args:
+            api_key_input: API 密钥输入框组件
+        """
+        new_key = generate_api_key()
+        self.settings_form["mcp_api_key"] = new_key
+        api_key_input.set_value(new_key)
+        ui.notify(t("settings_mcp.key_regenerated"), type="info")

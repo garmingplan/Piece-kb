@@ -8,6 +8,9 @@ import logging
 import json
 from typing import List, Union
 from fastmcp import FastMCP
+from fastmcp.server.middleware import Middleware, MiddlewareContext
+from fastmcp.server.dependencies import get_http_headers
+from fastmcp.exceptions import ToolError
 
 from indexing.mcp.tools.file_tools import create_empty_file, delete_file
 from indexing.mcp.tools.chunk_tools import (
@@ -23,8 +26,38 @@ from indexing.mcp.tools.query_tools import (
     get_chunk_info,
     get_storage_stats,
 )
+from indexing.settings import get_mcp_api_key, is_mcp_auth_enabled
 
 logger = logging.getLogger(__name__)
+
+
+class BearerAuthMiddleware(Middleware):
+    """Bearer Token 认证中间件"""
+
+    def __init__(self, valid_token: str):
+        self.valid_token = valid_token
+
+    def _verify_token(self) -> bool:
+        """验证 Bearer Token"""
+        headers = get_http_headers() or {}
+        auth_header = headers.get("authorization", "")
+
+        if not auth_header.startswith("Bearer "):
+            return False
+
+        token = auth_header[7:]  # 去掉 "Bearer " 前缀
+        return token == self.valid_token
+
+    async def on_call_tool(self, context: MiddlewareContext, call_next):
+        if not self._verify_token():
+            raise ToolError("Unauthorized: Invalid or missing API key")
+        return await call_next(context)
+
+    async def on_list_tools(self, context: MiddlewareContext, call_next):
+        if not self._verify_token():
+            raise ToolError("Unauthorized: Invalid or missing API key")
+        return await call_next(context)
+
 
 # 创建 FastMCP 实例
 # FastMCP 2.14.0+ 支持 strict_input_validation 参数
@@ -44,6 +77,11 @@ Piece 索引 MCP 服务 - 用户个人知识库文件和切片管理工具
 """,
     strict_input_validation=False,
 )
+
+# 如果启用认证，添加认证中间件
+if is_mcp_auth_enabled():
+    api_key = get_mcp_api_key()
+    mcp.add_middleware(BearerAuthMiddleware(valid_token=api_key))
 
 
 # ==================== 文件管理工具 ====================

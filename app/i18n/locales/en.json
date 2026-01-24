@@ -147,7 +147,15 @@
   "settings_mcp": {
     "title": "MCP Service Settings",
     "port": "Port Number",
-    "port_hint": "MCP service port number (requires application restart to take effect after modification)"
+    "port_hint": "MCP service port number (requires application restart to take effect after modification)",
+    "api_key": "Access Key",
+    "copy_key": "Copy",
+    "regenerate_key": "Regenerate",
+    "key_hint": "After regenerating, update MCP config in your AI client",
+    "key_copied": "Key copied to clipboard",
+    "key_regenerated": "New key generated, save to apply",
+    "auth_enabled": "Enable Key Authentication",
+    "auth_enabled_hint": "When disabled, anyone can access MCP service (only recommended for local debugging)"
   },
   "settings_storage": {
     "title": "Data Storage Settings",

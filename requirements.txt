@@ -1,5 +1,5 @@
 # 核心MCP服务框架
-fastmcp==2.14.3
+fastmcp==2.14.4
 
 # SQLite向量扩展
 sqlite-vec==0.1.6

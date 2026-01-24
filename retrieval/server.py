@@ -7,10 +7,43 @@ SQLite检索MCP服务 - 主入口文件
 
 import json
 from fastmcp import FastMCP, Context
+from fastmcp.server.middleware import Middleware, MiddlewareContext
+from fastmcp.server.dependencies import get_http_headers
+from fastmcp.exceptions import ToolError
 from typing import List, Annotated, Union, Optional
 from pydantic import Field
 
 from .tools import resolve_database_keywords, get_docs
+from indexing.settings import get_mcp_api_key, is_mcp_auth_enabled
+
+
+class BearerAuthMiddleware(Middleware):
+    """Bearer Token 认证中间件"""
+
+    def __init__(self, valid_token: str):
+        self.valid_token = valid_token
+
+    def _verify_token(self) -> bool:
+        """验证 Bearer Token"""
+        headers = get_http_headers() or {}
+        auth_header = headers.get("authorization", "")
+
+        if not auth_header.startswith("Bearer "):
+            return False
+
+        token = auth_header[7:]  # 去掉 "Bearer " 前缀
+        return token == self.valid_token
+
+    async def on_call_tool(self, context: MiddlewareContext, call_next):
+        if not self._verify_token():
+            raise ToolError("Unauthorized: Invalid or missing API key")
+        return await call_next(context)
+
+    async def on_list_tools(self, context: MiddlewareContext, call_next):
+        if not self._verify_token():
+            raise ToolError("Unauthorized: Invalid or missing API key")
+        return await call_next(context)
+
 
 # 创建FastMCP服务实例
 # FastMCP 2.14.0+ 支持 strict_input_validation 参数
@@ -20,6 +53,11 @@ mcp = FastMCP(
     instructions="Piece searches user's personal documents. Call resolve-keywords to find relevant documents, then get-docs to retrieve content.",
     strict_input_validation=False,
 )
+
+# 如果启用认证，添加认证中间件
+if is_mcp_auth_enabled():
+    api_key = get_mcp_api_key()
+    mcp.add_middleware(BearerAuthMiddleware(valid_token=api_key))
 
 
 @mcp.tool(

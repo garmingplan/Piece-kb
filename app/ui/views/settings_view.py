@@ -242,6 +242,58 @@ def _render_mcp_settings(settings_form: dict, settings_handlers):
 
             ui.separator()
 
+            # MCP 访问密钥
+            ui.label(t("settings_mcp.api_key")).classes("text-sm font-medium theme-text")
+
+            api_key_input = ui.input(
+                value=settings_form.get("mcp_api_key", ""),
+                on_change=lambda e: settings_form.update({"mcp_api_key": e.value}),
+            ).props("dense outlined readonly").classes("w-full")
+
+            with ui.row().classes("w-full items-center gap-2"):
+                # 复制按钮
+                async def copy_api_key():
+                    import json
+                    key = settings_form.get("mcp_api_key", "")
+                    await ui.run_javascript(
+                        f'navigator.clipboard.writeText({json.dumps(key)})'
+                    )
+                    ui.notify(t("settings_mcp.key_copied"), type="positive")
+
+                ui.button(
+                    t("settings_mcp.copy_key"),
+                    icon="content_copy",
+                    on_click=copy_api_key
+                ).props("flat dense size=sm").classes("theme-text-accent")
+
+                # 重新生成按钮
+                ui.button(
+                    t("settings_mcp.regenerate_key"),
+                    icon="refresh",
+                    on_click=lambda: settings_handlers.regenerate_mcp_api_key(api_key_input)
+                ).props("flat dense size=sm").classes("theme-text-accent")
+
+            ui.label(t("settings_mcp.key_hint")).classes("text-xs theme-text-muted")
+
+            ui.separator()
+
+            # 启用/禁用密钥验证
+            ui.label(t("settings_mcp.auth_enabled")).classes("text-sm font-medium theme-text")
+
+            current_auth_enabled = settings_form.get("mcp_auth_enabled", True)
+
+            def on_auth_enabled_change(e):
+                settings_form["mcp_auth_enabled"] = e.value
+
+            ui.switch(
+                value=current_auth_enabled,
+                on_change=on_auth_enabled_change,
+            ).classes("theme-text")
+
+            ui.label(t("settings_mcp.auth_enabled_hint")).classes("text-xs theme-text-muted")
+
+            ui.separator()
+
             with ui.row().classes("w-full justify-end"):
                 ui.button(t("settings.btn_save"), on_click=settings_handlers.save_settings_form).props("color=primary")
 

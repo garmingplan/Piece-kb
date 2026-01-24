@@ -13,11 +13,25 @@
 import sys
 import json
 import logging
+import secrets
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+def generate_api_key(length: int = 32) -> str:
+    """
+    生成随机 API 密钥
+
+    Args:
+        length: 密钥长度（默认 32 字符）
+
+    Returns:
+        str: 随机生成的 API 密钥（十六进制字符串）
+    """
+    return secrets.token_hex(length // 2)
 
 
 def _get_app_root() -> Path:
@@ -54,6 +68,8 @@ class EmbeddingSettings(BaseModel):
 class McpSettings(BaseModel):
     """MCP 服务配置"""
     port: int = 8686
+    api_key: str = ""  # MCP 访问密钥（为空时禁用认证）
+    auth_enabled: bool = True  # 是否启用密钥验证
 
 
 class AppearanceSettings(BaseModel):
@@ -117,6 +133,10 @@ def load_settings() -> AppSettings:
     # 配置文件不存在，创建默认配置
     logger.info(f"[Settings] 配置文件不存在，创建默认配置: {config_path}")
     default_settings = AppSettings()
+
+    # 首次启动时自动生成 MCP API 密钥
+    default_settings.mcp.api_key = generate_api_key()
+    logger.info(f"[Settings] 已自动生成 MCP API 密钥")
 
     # 确保目录存在
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -201,6 +221,18 @@ def get_mcp_port() -> int:
     """获取 MCP 服务端口"""
     settings = get_settings()  # 使用缓存
     return settings.mcp.port
+
+
+def get_mcp_api_key() -> str:
+    """获取 MCP API 密钥"""
+    settings = get_settings()  # 使用缓存
+    return settings.mcp.api_key
+
+
+def is_mcp_auth_enabled() -> bool:
+    """检查 MCP 认证是否启用"""
+    settings = get_settings()  # 使用缓存
+    return settings.mcp.auth_enabled and bool(settings.mcp.api_key)
 
 
 def get_db_path() -> Path:

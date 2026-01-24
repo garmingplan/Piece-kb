@@ -7,6 +7,7 @@ MCP 配置视图
 """
 
 import json
+import copy
 from nicegui import ui
 
 from app.i18n import t
@@ -228,18 +229,19 @@ MCP_CLIENTS = [
         "id": "claude_code",
         "name": "Claude Code",
         "icon": "data_object",
-        "config": {
-            "mcpServers": {
-                "piece-kb": {
-                    "type": "http",
-                    "url": "http://localhost:{port}/mcp"
-                },
-                "piece-index": {
-                    "type": "http",
-                    "url": "http://localhost:{index_port}/mcp"
-                }
-            }
-        }
+        "config": {},
+        "format": "bash",
+        "config_text": """# 添加检索服务
+claude mcp add \\
+  --header 'Authorization: Bearer {api_key}' \\
+  --transport http \\
+  piece-kb http://localhost:{port}/mcp
+
+# 添加索引服务
+claude mcp add \\
+  --header 'Authorization: Bearer {api_key}' \\
+  --transport http \\
+  piece-index http://localhost:{index_port}/mcp"""
     },
     # ==================== 独立 AI 客户端 ====================
     {
@@ -249,12 +251,18 @@ MCP_CLIENTS = [
         "config": {
             "mcpServers": {
                 "piece-kb": {
+                    "isActive": True,
+                    "name": "piece-kb",
+                    "type": "streamableHttp",
                     "url": "http://localhost:{port}/mcp",
-                    "type": "streamableHttp"
+                    "baseUrl": "http://localhost:{port}/mcp"
                 },
                 "piece-index": {
+                    "isActive": True,
+                    "name": "piece-index",
+                    "type": "streamableHttp",
                     "url": "http://localhost:{index_port}/mcp",
-                    "type": "streamableHttp"
+                    "baseUrl": "http://localhost:{index_port}/mcp"
                 }
             }
         }
@@ -402,7 +410,7 @@ MCP_CLIENTS = [
             }
         },
         "format": "toml",
-        "config_text": "[mcp_servers.piece-kb]\nurl = \"http://localhost:{port}/mcp\"\n\n[mcp_servers.piece-index]\nurl = \"http://localhost:{index_port}/mcp\""
+        "config_text": "[mcp_servers.piece-kb]\nurl = \"http://localhost:{port}/mcp\"\n\n[mcp_servers.piece-kb.headers]\nAuthorization = \"Bearer {api_key}\"\n\n[mcp_servers.piece-index]\nurl = \"http://localhost:{index_port}/mcp\"\n\n[mcp_servers.piece-index.headers]\nAuthorization = \"Bearer {api_key}\""
     },
     {
         "id": "copilot_cli",
@@ -570,24 +578,75 @@ def _get_config_json(client: dict) -> str:
 
     替换 {port} 占位符为实际端口（检索 MCP）
     替换 {index_port} 占位符为索引 MCP 端口
+    替换 {api_key} 占位符为 MCP API 密钥
     支持 JSON 和 TOML 格式
     """
     settings = get_settings()
     retrieval_port = settings.mcp.port  # 检索 MCP 端口（8686）
     index_port = settings.mcp.port + 1  # 索引 MCP 端口（8687）
+    api_key = settings.mcp.api_key  # MCP API 密钥
+    auth_enabled = settings.mcp.auth_enabled and bool(api_key)
 
     # 如果有 config_text 字段（如 TOML 格式），直接使用
     if "config_text" in client:
         config_str = client["config_text"]
     else:
+        # 深拷贝配置以避免修改原始模板
+        config = copy.deepcopy(client["config"])
+
+        # 如果认证启用，为配置添加 Authorization 头
+        if auth_enabled:
+            _add_auth_headers(config, api_key)
+
         # 默认使用 JSON 格式
-        config_str = json.dumps(client["config"], indent=2, ensure_ascii=False)
+        config_str = json.dumps(config, indent=2, ensure_ascii=False)
 
     # 替换端口占位符
     config_str = config_str.replace("{port}", str(retrieval_port))
     config_str = config_str.replace("{index_port}", str(index_port))
+    config_str = config_str.replace("{api_key}", api_key)
 
     return config_str
+
+
+def _add_auth_headers(config: dict, api_key: str):
+    """
+    为配置添加 Authorization 头
+
+    支持多种客户端配置格式
+    """
+    auth_header = {"Authorization": f"Bearer {api_key}"}
+
+    # 处理 mcpServers 格式（最常见）
+    if "mcpServers" in config:
+        for server_config in config["mcpServers"].values():
+            if isinstance(server_config, dict):
+                server_config["headers"] = auth_header
+
+    # 处理 mcp.servers 格式（VS Code, GitHub Copilot）
+    if "mcp" in config and isinstance(config["mcp"], dict):
+        servers = config["mcp"].get("servers", config["mcp"])
+        for server_config in servers.values():
+            if isinstance(server_config, dict):
+                server_config["headers"] = auth_header
+
+    # 处理 servers 格式（Visual Studio）
+    if "servers" in config and "mcp" not in config:
+        for server_config in config["servers"].values():
+            if isinstance(server_config, dict):
+                server_config["headers"] = auth_header
+
+    # 处理 augment.advanced.mcpServers 格式（Augment Code）
+    if "augment.advanced" in config:
+        mcp_servers = config["augment.advanced"].get("mcpServers", [])
+        for server_config in mcp_servers:
+            if isinstance(server_config, dict):
+                server_config["headers"] = auth_header
+
+    # 处理 Warp 格式（piece-kb 直接在根级别）
+    for key in list(config.keys()):
+        if key.startswith("piece-") and isinstance(config[key], dict) and "url" in config[key]:
+            config[key]["headers"] = auth_header
 
 
 def _get_config_language(client: dict) -> str:
@@ -685,7 +744,7 @@ def render_mcp_config_right(
                 config_text = _get_config_json(client)
                 config_lang = _get_config_language(client)
 
-                with ui.card().classes("w-full max-w-2xl theme-card").style(
+                with ui.card().classes("w-full theme-card").style(
                     "border: 1px solid var(--border-color)"
                 ):
                     with ui.column().classes("w-full gap-3 p-4"):

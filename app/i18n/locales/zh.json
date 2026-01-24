@@ -147,7 +147,15 @@
   "settings_mcp": {
     "title": "MCP 服务设置",
     "port": "端口号",
-    "port_hint": "MCP 服务端口号（修改后需重启应用生效）"
+    "port_hint": "MCP 服务端口号（修改后需重启应用生效）",
+    "api_key": "访问密钥",
+    "copy_key": "复制",
+    "regenerate_key": "重新生成",
+    "key_hint": "重新生成后需更新 AI 客户端的 MCP 配置",
+    "key_copied": "密钥已复制到剪贴板",
+    "key_regenerated": "已生成新密钥，保存后生效",
+    "auth_enabled": "启用密钥验证",
+    "auth_enabled_hint": "禁用后任何人都可以访问 MCP 服务（仅建议本地调试时使用）"
   },
   "settings_storage": {
     "title": "数据存储设置",
