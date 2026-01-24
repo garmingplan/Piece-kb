@@ -80,19 +80,25 @@ def create_readme():
 
 使用说明:
 1. 双击 Piece.exe 启动应用
-2. 拖入 PDF 或 Markdown 文件到应用中
-3. 在 Claude Desktop 或 Cursor 中配置 MCP 服务
-4. 开始对话查询你的知识库
+2. 进入「设置」页面，配置嵌入模型（必须）
+3. 拖入 PDF 或 Markdown 文件到应用中
+4. 在 Claude Desktop 或 Cursor 中配置 MCP 服务
+5. 开始对话查询你的知识库
+
+嵌入模型配置（必须）:
+- 默认使用硅基流动 API（https://api.siliconflow.cn/v1）
+- 需要填写 API Key（注册硅基流动获取）
+- 默认模型: BAAI/bge-m3（1024维向量）
+- 也可配置其他 OpenAI 兼容的嵌入服务
 
 MCP 服务配置:
-- 默认端口: 8686
-- 端点: http://localhost:8686/mcp
+- 检索服务: http://localhost:8686/mcp（只读查询）
+- 索引服务: http://localhost:8687/mcp（读写管理）
 
 数据存储:
 - 数据库和上传文件默认存储在 ./data 目录
 - 可在设置中修改存储路径
 
-更多信息请访问: https://github.com/anthropics/piece
 """
 
     readme_path = DIST_DIR / "Piece" / "README.txt"

@@ -63,8 +63,8 @@ def render_logs_middle(ui_refs: dict):
             # 统计信息
             with ui.row().classes("w-full items-center gap-2"):
                 ui.label(t("logs.total") + ":").classes("text-xs theme-text-muted")
-                stats_label = ui.label("0").classes("text-xs theme-text-accent")
-                ui_refs["stats_label"] = stats_label
+                logs_stats_label = ui.label("0").classes("text-xs theme-text-accent")
+                ui_refs["logs_stats_label"] = logs_stats_label
 
             # 操作按钮
             with ui.row().classes("w-full gap-2"):
@@ -199,7 +199,7 @@ def _refresh_logs(log_filter: dict, ui_refs: dict, stats: dict):
                     stats["total"] = total
 
                     # 刷新 UI
-                    ui_refs["stats_label"].set_text(str(total))
+                    ui_refs["logs_stats_label"].set_text(str(total))
                     ui_refs["logs_content"].refresh()
                 else:
                     ui.notify(result.get("message", t("logs.refresh_failed")), type="negative")

@@ -65,6 +65,9 @@ datas += copy_metadata('markitdown')
 # 收集 jieba 词典文件
 datas += collect_data_files('jieba')
 
+# 收集 magika 模型文件（markitdown 依赖）
+datas += collect_data_files('magika')
+
 # 隐式导入（PyInstaller 无法自动检测的模块）
 hiddenimports = [
     # NiceGUI 相关
@@ -111,6 +114,7 @@ hiddenimports = [
     # PDF 处理
     'pymupdf4llm',
     'markitdown',
+    'magika',
 ]
 
 # 排除不需要的模块（减小体积）
@@ -148,6 +152,7 @@ exe = EXE(
     exclude_binaries=True,
     name='Piece',
     debug=False,
+    contents_directory='lib',
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
