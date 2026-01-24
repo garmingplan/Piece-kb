@@ -18,6 +18,9 @@ from app.i18n import t
 from app.ui.components import confirm_dialog, file_create_dialog
 from app.utils import format_size, MAX_FILE_SIZE
 
+# 上传并发限制（避免耗尽数据库连接池，需小于连接池大小）
+_UPLOAD_CONCURRENCY = 5
+
 
 class FileHandlers:
     """文件操作处理器"""
@@ -37,12 +40,14 @@ class FileHandlers:
         # 批量删除模式状态
         self.state["batch_mode"] = False
         self.state["batch_selected_ids"] = set()
+        # 上传并发控制
+        self._upload_semaphore = asyncio.Semaphore(_UPLOAD_CONCURRENCY)
 
-    def load_files(self):
-        """加载文件列表"""
-        self.state["files_data"] = file_service.get_files_list()
+    async def load_files(self):
+        """加载文件列表（异步）"""
+        self.state["files_data"] = await asyncio.to_thread(file_service.get_files_list)
         self.apply_filter()
-        self.load_stats()
+        await self.load_stats()
 
     def apply_filter(self):
         """应用搜索过滤"""
@@ -63,9 +68,9 @@ class FileHandlers:
         self.state["search_keyword"] = e.args
         self.apply_filter()
 
-    def load_stats(self):
-        """加载统计信息"""
-        stats = file_service.get_storage_stats()
+    async def load_stats(self):
+        """加载统计信息（异步）"""
+        stats = await asyncio.to_thread(file_service.get_storage_stats)
         total = stats["total_files"]
         indexed = stats["indexed_files"]
         size_str = format_size(stats["total_size"])
@@ -117,10 +122,25 @@ class FileHandlers:
 
     async def handle_upload(self, e: events.UploadEventArguments):
         """
-        处理单个文件上传
+        处理单个文件上传（带并发控制）
 
-        批量上传时，每个文件都会触发此回调
+        使用信号量限制并发数，避免耗尽数据库连接池
+        刷新操作由 on_multi_upload 回调统一处理
         """
+        # 获取信号量，限制并发数
+        async with self._upload_semaphore:
+            await self._process_single_upload(e)
+
+    async def on_multi_upload_complete(self, e):
+        """
+        所有文件上传完成后的回调
+
+        统一刷新文件列表，避免每个文件都刷新
+        """
+        await self.load_files()
+
+    async def _process_single_upload(self, e: events.UploadEventArguments):
+        """处理单个文件上传的实际逻辑"""
         filename = e.file.name
         filename_lower = filename.lower()
 
@@ -138,6 +158,7 @@ class FileHandlers:
             ui.notify(t("files.upload_unsupported", formats=supported_str), type="negative")
             return
 
+        # 读取文件内容
         content = await e.file.read()
 
         # 检查大小
@@ -146,7 +167,7 @@ class FileHandlers:
             ui.notify(t("files.upload_too_large", size=f"{size_mb:.1f}"), type="negative")
             return
 
-        # 检查重复（大文件哈希计算放到线程中）
+        # 检查重复（哈希计算放到线程池）
         file_hash = await asyncio.to_thread(file_service.calculate_file_hash, content)
         existing_id = await asyncio.to_thread(file_service.check_file_hash_exists, file_hash)
         if existing_id:
@@ -171,13 +192,11 @@ class FileHandlers:
         await asyncio.to_thread(task_service.update_task_status, task_id, "pending", file_id=file_id)
 
         ui.notify(t("files.upload_processing"), type="positive")
-        self.load_files()
-        self.load_stats()
         self.on_task_created(task_id)
 
     def on_upload_rejected(self, e):
-        """处理被拒绝的文件（格式不符）"""
-        ui.notify(t("files.upload_only_md"), type="negative")
+        """处理被拒绝的文件（格式不符或超过数量限制）"""
+        ui.notify(t("files.upload_rejected"), type="negative")
 
     async def delete_selected_file(self):
         """删除选中的文件"""
@@ -207,8 +226,7 @@ class FileHandlers:
             ui.notify(t("files.deleted"), type="positive")
             self.state["selected_file_id"] = None
             self.state["chunks_data"] = []
-            self.load_files()
-            self.load_stats()
+            await self.load_files()
             if self.ui_refs.get("chunk_inspector"):
                 self.ui_refs["chunk_inspector"].refresh()
         else:
@@ -231,8 +249,7 @@ class FileHandlers:
             ui.notify(t("files.created", filename=result["filename"]), type="positive")
 
             # 刷新文件列表
-            self.load_files()
-            self.load_stats()
+            await self.load_files()
 
             # 自动选中新创建的文件
             await self.load_chunks(result["file_id"])
@@ -329,8 +346,7 @@ class FileHandlers:
 
         # 退出批量模式并刷新
         self.exit_batch_mode()
-        self.load_files()
-        self.load_stats()
+        await self.load_files()
 
         ui.notify(t("files.batch_deleted", count=deleted_count), type="positive")
 
@@ -431,7 +447,7 @@ class FileHandlers:
         new_count = await self.scan_and_index_new_files()
 
         # 刷新文件列表
-        self.load_files()
+        await self.load_files()
 
         if new_count > 0:
             ui.notify(t("files.scan_found_new", count=new_count), type="positive")

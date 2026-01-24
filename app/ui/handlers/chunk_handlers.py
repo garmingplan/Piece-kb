@@ -98,7 +98,7 @@ class ChunkHandlers:
                 ui.notify(t("chunks.last_chunk_deleted"), type="positive")
                 self.state["selected_file_id"] = None
                 self.state["chunks_data"] = []
-                self.on_refresh_files()
+                await self.on_refresh_files()
                 if self.ui_refs.get("chunk_inspector"):
                     self.ui_refs["chunk_inspector"].refresh()
             else:
@@ -133,7 +133,7 @@ class ChunkHandlers:
         )
         ui.notify(t("chunks.add_task_created"), type="positive")
         self.on_task_created(task_id)
-        self.on_refresh_files()
+        await self.on_refresh_files()
 
     async def _reload_chunks(self):
         """重新加载当前文件的切片（异步 + 后端分页）"""
@@ -320,7 +320,7 @@ class ChunkHandlers:
         if file_deleted:
             self.state["selected_file_id"] = None
             self.state["chunks_data"] = []
-            self.on_refresh_files()
+            await self.on_refresh_files()
 
         # 退出批量模式
         self.state["chunk_batch_mode"] = False

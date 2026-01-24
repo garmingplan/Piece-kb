@@ -43,6 +43,8 @@
     "upload_exists": "File already exists, no need to upload again",
     "upload_processing": "File uploaded successfully, processing...",
     "upload_too_large": "File size exceeds limit ({size}MB), maximum 100MB supported",
+    "upload_rejected": "File rejected (unsupported format or exceeds 30 files limit)",
+    "upload_limit_exceeded": "Exceeds upload limit (max 30), skipped",
     "upload_batch_success": "Successfully uploaded {count} files, processing...",
     "upload_batch_skip": "Skipped {count} files (duplicate/invalid/exceeds limit)",
     "refresh": "Refresh and scan new files",

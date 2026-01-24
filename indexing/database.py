@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # 全局连接池（线程安全）
 _connection_pool = None
 _pool_lock = threading.Lock()
-_pool_size = 5  # 连接池大小
+_pool_size = 10  # 连接池大小
 
 
 class ConnectionPool:

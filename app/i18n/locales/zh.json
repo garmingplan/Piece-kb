@@ -43,6 +43,8 @@
     "upload_exists": "文件已存在，无需重复上传",
     "upload_processing": "文件上传成功，正在处理...",
     "upload_too_large": "文件大小超出限制（{size}MB），最大支持 100MB",
+    "upload_rejected": "文件被拒绝（格式不支持或超过30个文件限制）",
+    "upload_limit_exceeded": "超过单次上传限制（最多30个），已跳过",
     "upload_batch_success": "已成功上传 {count} 个文件，正在处理...",
     "upload_batch_skip": "已跳过 {count} 个文件（重复/格式错误/超出限制）",
     "refresh": "刷新并扫描新文件",

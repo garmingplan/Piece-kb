@@ -77,11 +77,14 @@ def render_files_middle(
             ui_refs["toolbar_buttons"] = toolbar_buttons
             toolbar_buttons()
 
-        # 隐藏的上传组件（支持批量上传）
+        # 隐藏的上传组件（支持批量上传，最多30个文件）
         ui_refs["upload_input"] = ui.upload(
             on_upload=file_handlers.handle_upload,
+            on_multi_upload=file_handlers.on_multi_upload_complete,
+            on_rejected=file_handlers.on_upload_rejected,
             auto_upload=True,
             multiple=True,
+            max_files=30,
         ).props("accept=.md,.pdf,.pptx,.xlsx,.docx,.txt").classes("hidden")
 
         # 搜索框

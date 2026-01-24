@@ -266,8 +266,10 @@ def register_pages():
             right_column()
 
         # ========== 初始化 ==========
-        file_handlers.load_files()
-        file_handlers.load_stats()
-        task_handlers.init_active_tasks()  # 恢复进行中的任务
+        async def init_async():
+            """异步初始化"""
+            await file_handlers.load_files()
+            task_handlers.init_active_tasks()  # 恢复进行中的任务
 
+        ui.timer(0.1, init_async, once=True)  # 延迟异步初始化
         ui.timer(1.0, task_handlers.check_pending_tasks)
